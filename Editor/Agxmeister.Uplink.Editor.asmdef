@@ -1,0 +1,16 @@
+{
+  "name": "Agxmeister.Uplink.Editor",
+  "rootNamespace": "Agxmeister.Uplink",
+  "references": [],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

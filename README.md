@@ -2,7 +2,7 @@
 
 **MCP remote control for the Unity Editor.**
 
-Uplink is a Unity Editor plugin that exposes the Editor to AI assistants via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io). It closes the feedback loop for AI-assisted Unity development: your assistant can compile, read console output, run tests, and *see* the scene through screenshots — instead of editing scripts blindly.
+Uplink is a Unity Editor plugin that exposes the Editor as a small RESTful API, described by OpenAPI, so AI assistants can drive it through any OpenAPI-to-[MCP](https://modelcontextprotocol.io) adapter. It closes the feedback loop for AI-assisted Unity development: your assistant can compile, read console output, run tests, and *see* the scene through screenshots — instead of editing scripts blindly.
 
 Works with Claude Code, Claude Desktop, Cursor, and any other MCP client.
 
@@ -14,14 +14,15 @@ AI coding assistants are great at writing Unity C#, but by default they are blin
 
 ## Features
 
-Uplink deliberately ships a compact, feedback-loop-first toolset:
+Uplink deliberately ships a compact, feedback-loop-first toolset. Version 0.1.0 ships the first one:
 
-| Tool | What it does |
-|---|---|
-| `read_console` | Read Editor console messages (errors, warnings, logs), with filtering and paging |
-| `refresh` | Trigger asset database refresh / script recompilation and report compile errors |
-| `run_tests` | Run EditMode / PlayMode tests via the Unity Test Framework and return structured results |
-| `screenshot` | Capture the Game view, Scene view, or a specific camera as a PNG — returned inline so the assistant can see it |
+| Endpoint | Tool | What it does |
+|---|---|---|
+| `GET /status` | `status` | Report the Editor: Unity version, platform, project, build target, active scene, play mode |
+| `GET /console` | `read_console` | *(planned)* Read Editor console messages (errors, warnings, logs), with filtering and paging |
+| `POST /refresh` | `refresh` | *(planned)* Trigger asset database refresh / script recompilation and report compile errors |
+| `POST /tests` | `run_tests` | *(planned)* Run EditMode / PlayMode tests via the Unity Test Framework and return structured results |
+| `GET /screenshot` | `screenshot` | *(planned)* Capture the Game view, Scene view, or a specific camera as a PNG |
 
 That's it, by design. The assistant writes code with its own file tools; Uplink tells it whether the code compiles, passes tests, and looks right.
 
@@ -29,10 +30,11 @@ That's it, by design. The assistant writes code with its own file tools; Uplink 
 
 - Unity 2021.3 LTS or newer
 - An MCP-capable AI client (Claude Code, Claude Desktop, Cursor, …)
+- An OpenAPI-to-MCP adapter, e.g. [`@ivotoby/openapi-mcp-server`](https://github.com/ivo-toby/mcp-openapi-server) (Node)
 
 ## Installation
 
-**Via Package Manager (git URL):**
+**1. Install the Unity package** — via Package Manager (git URL):
 
 1. Open `Window → Package Manager`
 2. Click `+` → *Add package from git URL…*
@@ -42,13 +44,28 @@ That's it, by design. The assistant writes code with its own file tools; Uplink 
 https://github.com/agxmeister/uplink.git
 ```
 
+Open your project; Uplink starts with the Editor. Check `Window → Uplink` for status and the port, or:
+
+```
+curl http://localhost:8787/status
+```
+
+**2. Point an adapter at the spec** — for Claude Code:
+
+```
+claude mcp add uplink -- npx -y @ivotoby/openapi-mcp-server \
+  --api-base-url http://localhost:8787 \
+  --openapi-spec http://localhost:8787/openapi.json
+```
+
+Any other adapter works the same way: it only needs the base URL and `/openapi.json`. Operation ids in the spec become
+the tool names.
+
 ## Quickstart
 
-1. Install the package (above) and open your project. Uplink starts with the Editor — check `Window → Uplink` for status.
-2. Register Uplink with your MCP client (see the documentation of your client).
-3. Ask your assistant something like:
+Ask your assistant:
 
-   > "Refresh Unity, fix any compile errors in PlayerController.cs, run the EditMode tests, and show me a screenshot of the Game view."
+> "Call uplink status — which Unity version and scene am I on?"
 
 ## How it works
 
@@ -56,17 +73,24 @@ https://github.com/agxmeister/uplink.git
 AI client (Claude Code, Cursor, …)
         │  MCP protocol
         ▼
+OpenAPI-to-MCP adapter
+        │  HTTP on http://localhost:8787, tools generated from /openapi.json
+        ▼
 Uplink Editor plugin (this package)
         │  UnityEditor API, main thread
         ▼
 Console · Compilation · Test Runner · Cameras
 ```
 
-The Editor plugin marshals every command onto the Editor main thread, executes it against the `UnityEditor` APIs, and returns structured JSON (or PNG image content for screenshots). Long-running operations such as test runs and domain reloads are handled asynchronously and survive script recompilation.
+The plugin is a plain REST API — one endpoint per tool, self-described by `GET /openapi.json` — and contains no MCP
+code at all. It marshals each request onto
+the Editor main thread, executes it against the `UnityEditor` APIs, and returns JSON. MCP is left entirely to an
+off-the-shelf adapter, which keeps this package small and every endpoint reachable with `curl` while debugging.
 
 ## Recommended CLAUDE.md snippet
 
-If you use Claude Code, add something like this to your project's `CLAUDE.md`:
+If you use Claude Code, add something like this to *your Unity project's* `CLAUDE.md` (this repository's
+[`CLAUDE.md`](CLAUDE.md) is a different thing — it documents Uplink's own internals for contributors):
 
 ```markdown
 ## Unity workflow
@@ -84,7 +108,11 @@ If you use Claude Code, add something like this to your project's `CLAUDE.md`:
 
 ## Contributing
 
-Issues and PRs welcome. Keep tools small and focused — Uplink's goal is a tight feedback loop, not full Editor automation.
+Issues and PRs welcome. Keep tools small and focused — Uplink's goal is a tight feedback loop, not full Editor
+automation.
+
+Adding an endpoint is one new class plus one line of registration. See [`CLAUDE.md`](CLAUDE.md) for the
+architecture, the conventions it expects, and how to run the tests.
 
 ## License
 

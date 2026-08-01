@@ -1,6 +1,6 @@
 {
   "name": "com.agxmeister.uplink",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "displayName": "Uplink",
   "description": "MCP remote control for the Unity Editor.",
   "unity": "2021.3",
@@ -15,6 +15,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "com.unity.nuget.newtonsoft-json": "3.2.1"
+    "com.unity.nuget.newtonsoft-json": "3.2.1",
+    "com.unity.test-framework": "1.1.33"
   }
 }

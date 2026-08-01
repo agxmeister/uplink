@@ -14,23 +14,29 @@ AI coding assistants are great at writing Unity C#, but by default they are blin
 
 ## Features
 
-Uplink deliberately ships a compact, feedback-loop-first toolset. Version 0.1.0 ships the first one:
+Uplink deliberately ships a compact, feedback-loop-first toolset:
 
 | Endpoint | Tool | What it does |
 |---|---|---|
 | `GET /status` | `status` | Report the Editor: Unity version, platform, project, build target, active scene, play mode |
-| `GET /console` | `read_console` | *(planned)* Read Editor console messages (errors, warnings, logs), with filtering and paging |
-| `POST /refresh` | `refresh` | *(planned)* Trigger asset database refresh / script recompilation and report compile errors |
-| `POST /tests` | `run_tests` | *(planned)* Run EditMode / PlayMode tests via the Unity Test Framework and return structured results |
-| `GET /screenshot` | `screenshot` | *(planned)* Capture the Game view, Scene view, or a specific camera as a PNG |
+| `POST /compile` | `compile` | Build the scripts and report compiler errors with file, line and column |
+| `GET /console` | `read_console` | Read console messages, filtered by severity and text, from a cursor so each is seen once |
+| `POST /tests` | `run_tests` | Run the EditMode or PlayMode suite and report which tests failed, and why |
+| `GET /screenshot` | `screenshot` | Capture a camera, the Game view or the Scene view as a PNG |
+| `GET /scene` | `read_scene` | List the objects in the open scenes, with their paths and components |
+| `GET /object` | `read_object` | Read one GameObject's components and their serialized values |
+| `POST /play` | `set_play_mode` | Enter, leave, pause or step play mode |
 
 That's it, by design. The assistant writes code with its own file tools; Uplink tells it whether the code compiles, passes tests, and looks right.
+
+Three of these — `compile`, `run_tests` and `set_play_mode` — do something that outlives the request that asked for it, because compiling and entering play mode reload the Editor's script domain and take the HTTP listener with them. They are therefore **called repeatedly rather than waited on**: the first call starts the work and answers `202`, and a later call returns the result and resets, so the call after that starts the next run. The tool descriptions in `/openapi.json` spell this out, so an assistant reading them gets it right without being told.
 
 ## Requirements
 
 - Unity 2021.3 LTS or newer
+- `com.unity.test-framework` and `com.unity.nuget.newtonsoft-json`, both installed automatically as package dependencies
 - An MCP-capable AI client (Claude Code, Claude Desktop, Cursor, …)
-- An OpenAPI-to-MCP adapter, e.g. [`@ivotoby/openapi-mcp-server`](https://github.com/ivo-toby/mcp-openapi-server) (Node)
+- An OpenAPI-to-MCP adapter — [whispr](https://github.com/agxmeister/whispr) is the one Uplink is developed against (Node 20+)
 
 ## Installation
 
@@ -50,16 +56,44 @@ Open your project; Uplink starts with the Editor. Check `Window → Uplink` for 
 curl http://localhost:8787/status
 ```
 
-**2. Point an adapter at the spec** — for Claude Code:
+**2. Point an adapter at the spec.** With [whispr](https://github.com/agxmeister/whispr), Uplink is an *edge* —
+drop this in its `edges/uplink.json`:
 
-```
-claude mcp add uplink -- npx -y @ivotoby/openapi-mcp-server \
-  --api-base-url http://localhost:8787 \
-  --openapi-spec http://localhost:8787/openapi.json
+```json
+{
+    "name": "Uplink",
+    "description": "Uplink exposes a running Unity Editor, so that a change to a project can be compiled, tested and looked at.",
+    "tasks": [
+        "compile the project's scripts and read the errors",
+        "read the Editor console",
+        "run EditMode and PlayMode tests",
+        "capture the game or scene as an image",
+        "inspect the objects in the open scenes",
+        "enter and leave play mode"
+    ],
+    "api": {
+        "specification": {
+            "url": "{{HOST}}/openapi.json"
+        },
+        "request": {
+            "url": "{{HOST}}"
+        }
+    },
+    "environment": [{
+        "name": "HOST",
+        "description": "The base URL of the Unity Editor running Uplink, as shown in Window > Uplink (e.g. http://localhost:8787)."
+    }]
+}
 ```
 
-Any other adapter works the same way: it only needs the base URL and `/openapi.json`. Operation ids in the spec become
-the tool names.
+Then build whispr's configuration and register it with your client, as its README describes. Do **not** give
+this edge whispr's read-only profile: that filters the spec down to `GET`, which hides `compile`, `run_tests`
+and `set_play_mode` — most of the feedback loop.
+
+Any other adapter works too; it only needs the base URL and `/openapi.json`. Note that adapters differ in how
+much of the spec they show the model — whispr has it list endpoints and read their descriptions, while others
+generate one tool per operation and use `operationId` as its name. Uplink writes for both: see
+[ADR-0008](Documentation~/adr/0008-endpoint-prose-is-the-interface.md).
 
 ## Quickstart
 
@@ -73,19 +107,22 @@ Ask your assistant:
 AI client (Claude Code, Cursor, …)
         │  MCP protocol
         ▼
-OpenAPI-to-MCP adapter
-        │  HTTP on http://localhost:8787, tools generated from /openapi.json
+OpenAPI-to-MCP adapter (whispr)
+        │  HTTP on http://localhost:8787, tools driven by /openapi.json
         ▼
 Uplink Editor plugin (this package)
         │  UnityEditor API, main thread
         ▼
-Console · Compilation · Test Runner · Cameras
+Console · Compilation · Test Runner · Cameras · Scene graph
 ```
 
 The plugin is a plain REST API — one endpoint per tool, self-described by `GET /openapi.json` — and contains no MCP
 code at all. It marshals each request onto
 the Editor main thread, executes it against the `UnityEditor` APIs, and returns JSON. MCP is left entirely to an
 off-the-shelf adapter, which keeps this package small and every endpoint reachable with `curl` while debugging.
+
+The reasoning behind that split, and the other decisions that shape the package, is recorded in
+[`Documentation~/adr`](Documentation~/adr).
 
 ## Recommended CLAUDE.md snippet
 
@@ -94,15 +131,19 @@ If you use Claude Code, add something like this to *your Unity project's* `CLAUD
 
 ```markdown
 ## Unity workflow
-- After editing any C# script, call uplink `refresh` and fix reported compile errors before proceeding.
-- Verify behavior with uplink `run_tests`; verify visuals with uplink `screenshot`.
+- After editing any C# script, call uplink `compile` and fix every reported error before going on.
+  It answers 202 while it builds — call it again until `state` is `done`.
+- Then call uplink `run_tests`; failures come back with the assertion message and stack trace.
+- Note the `nextSince` from uplink `read_console` before an action and pass it back afterwards,
+  to see only what that action logged.
+- Verify visuals with uplink `screenshot`, and check that a change landed on the object you meant
+  with uplink `read_scene` / `read_object`.
 - Never edit .unity, .prefab, or .asset YAML files directly.
 ```
 
 ## Roadmap
 
-- [ ] Scene hierarchy inspection (read-only)
-- [ ] Play mode enter/exit control
+- [ ] Editing the scene, not only reading it
 - [ ] Multi-instance routing (several open Editors)
 - [ ] OpenUPM package
 

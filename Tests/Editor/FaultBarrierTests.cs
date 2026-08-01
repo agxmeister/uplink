@@ -32,6 +32,14 @@ namespace Agxmeister.Uplink.Tests
         }
 
         [Test]
+        public void ReportsAMalformedRequestAsBadRequest()
+        {
+            var barrier = new FaultBarrier(new Throwing(new BadRequestException("'limit' must be a whole number.")), new SilentLog());
+
+            Assert.AreEqual(400, barrier.Handle(Requests.Of("GET", "/console")).Status);
+        }
+
+        [Test]
         public void ReportsAnyOtherFailureAsServerError()
         {
             var barrier = new FaultBarrier(new Throwing(new InvalidOperationException("boom")), new SilentLog());

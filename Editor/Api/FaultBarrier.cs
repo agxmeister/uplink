@@ -34,6 +34,12 @@ namespace Agxmeister.Uplink.Api
             {
                 return inner.Handle(request);
             }
+            catch (BadRequestException exception)
+            {
+                // The client asked wrongly; nothing here is broken, so this is not worth an Editor error.
+                log.Warning(string.Format("{0} {1} rejected: {2}", request.Method, request.Path, exception.Message));
+                return Response.Error(400, exception.Message);
+            }
             catch (TimeoutException exception)
             {
                 // The Editor is busy rather than broken: the client should retry, not treat this as a bug.

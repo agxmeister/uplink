@@ -22,11 +22,17 @@ parse, and is handed back as a mangled string inside `{status, body}`. Raw PNG d
 
 ## Decision
 
-**Capture:** `view=camera` is the default and renders a named camera — or the scene's main camera — through a
-`RenderTexture`. `view=scene` renders the Scene view's camera the same way. `view=game` grabs the Game view
-with `ScreenCapture.CaptureScreenshotAsTexture`, but only while play mode is running; outside it, the camera
-path is used instead. The response always reports which view was *really* rendered, in the `view` field and
-the `X-Uplink-View` header, so a fallback is never silent.
+**Capture:** `view=camera` is the default and renders the scene's main camera through a `RenderTexture`.
+`view=scene` renders the Scene view's camera the same way. `view=game` grabs the Game view with
+`ScreenCapture.CaptureScreenshotAsTexture`, but only while play mode is running.
+
+A view that cannot draw falls back to one that can, **in both directions**: a scene with no enabled camera is
+captured from the Scene view, and a closed Scene view from a camera. The response always reports which view
+was *really* rendered, in the `view` field and the `X-Uplink-View` header, so a fallback is never silent.
+
+Naming a `camera` is the exception. That is an explicit request, so a camera that is missing or disabled fails
+the call rather than quietly photographing a different one — an answer that looked like agreement would be
+worse than no answer.
 
 **Encoding:** `format=base64` is the default, returning `{view, width, height, image}` as JSON.
 `format=png` returns the PNG itself, which is what a browser or `curl -o` wants.
@@ -40,6 +46,13 @@ the `X-Uplink-View` header, so a fallback is never silent.
 - `curl -o shot.png "…/screenshot?format=png"` still does the obvious thing, so debugging by hand is unchanged.
 - A camera render does not show gizmos, overlays, or anything else drawn on top of the camera. When that
   matters, `view=game` in play mode is the honest answer, and it says so when it could not oblige.
+- Asking for a picture nearly always yields one, which is the point: an empty scene, a project with no
+  `MainCamera` tag, and a disabled camera are all ordinary states an assistant will meet, and none of them
+  should turn "show me the scene" into an error. The reciprocal risk — being handed the wrong view without
+  noticing — is what `view` and `X-Uplink-View` are for.
+- `Camera.main` and `Camera.allCameras` both see only *enabled* cameras on *active* objects, so a camera
+  that exists but is switched off reads as no camera at all. The error message says so, because the
+  difference is invisible from outside the Editor.
 - The camera is the scene's, not ours, so `targetTexture` and `RenderTexture.active` are restored in a
   `finally` — leaving a scene camera pointed at a texture about to be destroyed would black out the Editor's
   own view of it.

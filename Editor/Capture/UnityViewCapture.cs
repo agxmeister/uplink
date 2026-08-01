@@ -20,22 +20,45 @@ namespace Agxmeister.Uplink.Capture
                 }
             }
 
-            // A Game view asked for outside play mode, or a Scene view with no Scene window open, falls back
-            // to rendering a camera rather than to nothing — and says so.
-            var camera = request.View == CaptureView.Scene ? SceneCamera() : null;
-            var view = camera != null ? CaptureView.Scene : CaptureView.Camera;
-
-            if (camera == null)
+            // A named camera is an explicit request. If it is not there, say so rather than quietly
+            // photographing something else and letting the answer look like agreement.
+            if (!string.IsNullOrEmpty(request.Camera))
             {
-                camera = SceneObjectCamera(request.Camera);
-            }
-            if (camera == null)
-            {
-                throw new BadRequestException(request.Camera == null
-                    ? "This scene has no camera to render, and no Scene view is open."
-                    : string.Format("No camera named '{0}' in the open scenes.", request.Camera));
+                var named = NamedCamera(request.Camera);
+                if (named == null)
+                {
+                    throw new BadRequestException(string.Format(
+                        "No camera named '{0}' among the enabled cameras in the open scenes.", request.Camera));
+                }
+                return Rendered(CaptureView.Camera, named, request);
             }
 
+            // Otherwise render whichever view can actually draw, preferring the one asked for. Either may be
+            // missing — a scene need not contain a camera, and a Scene view need not be open — so each falls
+            // back to the other and the result says which it turned out to be.
+            var sceneView = SceneViewCamera();
+            var main = MainCamera();
+
+            if (request.View == CaptureView.Scene && sceneView != null)
+            {
+                return Rendered(CaptureView.Scene, sceneView, request);
+            }
+            if (main != null)
+            {
+                return Rendered(CaptureView.Camera, main, request);
+            }
+            if (sceneView != null)
+            {
+                return Rendered(CaptureView.Scene, sceneView, request);
+            }
+
+            throw new BadRequestException(
+                "Nothing to render: the open scenes have no enabled camera, and no Scene view is open. " +
+                "Add a camera to the scene, enable the one that is there, or open the Scene window.");
+        }
+
+        private static CaptureResult Rendered(string view, Camera camera, CaptureRequest request)
+        {
             return new CaptureResult
             {
                 View = view,
@@ -45,20 +68,31 @@ namespace Agxmeister.Uplink.Capture
             };
         }
 
-        private static Camera SceneCamera()
+        private static Camera SceneViewCamera()
         {
             var view = SceneView.lastActiveSceneView;
             return view == null ? null : view.camera;
         }
 
-        private static Camera SceneObjectCamera(string name)
+        /// <summary>
+        /// The scene's main camera, or any enabled one if nothing carries the tag. Both this and
+        /// <see cref="Camera.allCameras"/> see only enabled cameras on active objects, which is why a
+        /// disabled camera reads here as no camera at all.
+        /// </summary>
+        private static Camera MainCamera()
         {
-            if (string.IsNullOrEmpty(name))
+            var main = Camera.main;
+            if (main != null)
             {
-                var main = Camera.main;
-                return main != null ? main : FirstCamera();
+                return main;
             }
 
+            var cameras = Camera.allCameras;
+            return cameras.Length == 0 ? null : cameras[0];
+        }
+
+        private static Camera NamedCamera(string name)
+        {
             foreach (var camera in Camera.allCameras)
             {
                 if (camera.name == name)
@@ -67,12 +101,6 @@ namespace Agxmeister.Uplink.Capture
                 }
             }
             return null;
-        }
-
-        private static Camera FirstCamera()
-        {
-            var cameras = Camera.allCameras;
-            return cameras.Length == 0 ? null : cameras[0];
         }
 
         /// <summary>

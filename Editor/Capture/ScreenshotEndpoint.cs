@@ -51,9 +51,14 @@ namespace Agxmeister.Uplink.Capture
                 "`view=camera` renders a camera in the scene at whatever size is asked for and works " +
                 "whether or not the game is running — the dependable choice. `view=game` grabs the Game " +
                 "view as a person would see it, including anything drawn over the camera, but only while " +
-                "play mode is running; outside it, a camera render comes back instead. `view=scene` " +
-                "renders the Scene view, which is useful for looking at objects the game camera cannot " +
-                "see. The response says which view was really used.\n\n" +
+                "play mode is running. `view=scene` renders the Scene view, which is useful for looking " +
+                "at objects the game camera cannot see.\n\n" +
+                "A view that cannot draw falls back to one that can — a scene with no enabled camera is " +
+                "captured from the Scene view, and a closed Scene view from a camera — so asking for a " +
+                "picture generally gets one. The `view` field and the `X-Uplink-View` header always name " +
+                "what was really rendered, so a fallback is never silent. Naming a `camera` is the " +
+                "exception: if that camera is missing or disabled, the call fails rather than " +
+                "photographing a different one.\n\n" +
                 "The image comes back base64-encoded inside JSON by default, because an MCP adapter " +
                 "generally reads a response as text and would corrupt raw PNG bytes. Ask for " +
                 "`format=png` to get the PNG itself, which is what a browser or `curl -o` wants.",

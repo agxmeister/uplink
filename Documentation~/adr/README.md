@@ -22,6 +22,7 @@ useful part.
 | [0006](0006-test-framework-is-a-hard-dependency.md) | The Unity Test Framework is a hard package dependency | Accepted |
 | [0007](0007-scene-access-is-read-only.md) | Scene access is read-only | Accepted |
 | [0008](0008-endpoint-prose-is-the-interface.md) | An endpoint's prose is its interface | Accepted |
+| [0009](0009-refresh-reopens-open-scenes.md) | Refresh re-opens the open scenes | Accepted |
 
 ## Why `Documentation~`
 

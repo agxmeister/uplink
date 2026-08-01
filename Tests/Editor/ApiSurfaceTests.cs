@@ -6,6 +6,7 @@ using Agxmeister.Uplink.Compilation;
 using Agxmeister.Uplink.Console;
 using Agxmeister.Uplink.Hierarchy;
 using Agxmeister.Uplink.PlayMode;
+using Agxmeister.Uplink.Refresh;
 using Agxmeister.Uplink.Status;
 using Agxmeister.Uplink.Testing;
 using Newtonsoft.Json.Linq;
@@ -93,6 +94,7 @@ namespace Agxmeister.Uplink.Tests
                 new SceneEndpoint(probe),
                 new ObjectEndpoint(probe),
                 new TestsEndpoint(new NoTests()),
+                new RefreshEndpoint(new StubRefresher()),
             };
 
             var openApi = new OpenApiEndpoint(endpoints, "Uplink", "Test.", "0.2.0");
@@ -115,7 +117,7 @@ namespace Agxmeister.Uplink.Tests
                 new[]
                 {
                     "/status", "/console", "/compile", "/play", "/screenshot", "/scene", "/object", "/tests",
-                    "/openapi.json",
+                    "/refresh", "/openapi.json",
                 },
                 served);
         }
@@ -134,7 +136,7 @@ namespace Agxmeister.Uplink.Tests
                 }
             }
 
-            Assert.AreEqual(9, names.Count);
+            Assert.AreEqual(10, names.Count);
         }
 
         [Test]

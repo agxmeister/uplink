@@ -10,6 +10,7 @@ using Agxmeister.Uplink.Hierarchy;
 using Agxmeister.Uplink.Http;
 using Agxmeister.Uplink.Persistence;
 using Agxmeister.Uplink.PlayMode;
+using Agxmeister.Uplink.Refresh;
 using Agxmeister.Uplink.Services;
 using Agxmeister.Uplink.Status;
 using Agxmeister.Uplink.Testing;
@@ -78,6 +79,9 @@ namespace Agxmeister.Uplink
             var tests = new UnityTestRunner(new TestLog(), Store);
             Services.Add(tests);
 
+            var refresher = new UnityRefresher(new RefreshLog(), Store);
+            Services.Add(refresher);
+
             // Services first: they must be listening to the Editor before any endpoint is asked about it.
             Attach(Services);
 
@@ -87,6 +91,7 @@ namespace Agxmeister.Uplink
             Endpoints.Add(OnMainThread(new CompileEndpoint(compiler)));
             Endpoints.Add(OnMainThread(new PlayModeEndpoint(new PlayModeControl(playMode))));
             Endpoints.Add(OnMainThread(new ScreenshotEndpoint(new UnityViewCapture())));
+            Endpoints.Add(OnMainThread(new RefreshEndpoint(refresher)));
 
             var scenes = new UnitySceneProbe();
             Endpoints.Add(OnMainThread(new SceneEndpoint(scenes)));

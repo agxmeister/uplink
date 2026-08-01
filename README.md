@@ -26,10 +26,11 @@ Uplink deliberately ships a compact, feedback-loop-first toolset:
 | `GET /scene` | `read_scene` | List the objects in the open scenes, with their paths and components |
 | `GET /object` | `read_object` | Read one GameObject's components and their serialized values |
 | `POST /play` | `set_play_mode` | Enter, leave, pause or step play mode |
+| `POST /refresh` | `refresh` | Make the Editor re-read files changed on disk, re-opening the open scenes |
 
 That's it, by design. The assistant writes code with its own file tools; Uplink tells it whether the code compiles, passes tests, and looks right.
 
-Three of these — `compile`, `run_tests` and `set_play_mode` — do something that outlives the request that asked for it, because compiling and entering play mode reload the Editor's script domain and take the HTTP listener with them. They are therefore **called repeatedly rather than waited on**: the first call starts the work and answers `202`, and a later call returns the result and resets, so the call after that starts the next run. The tool descriptions in `/openapi.json` spell this out, so an assistant reading them gets it right without being told.
+Four of these — `compile`, `run_tests`, `set_play_mode` and `refresh` — do something that outlives the request that asked for it, because compiling, importing and entering play mode reload the Editor's script domain and take the HTTP listener with them. They are therefore **called repeatedly rather than waited on**: the first call starts the work and answers `202`, and a later call returns the result and resets, so the call after that starts the next run. The tool descriptions in `/openapi.json` spell this out, so an assistant reading them gets it right without being told.
 
 ## Requirements
 

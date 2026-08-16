@@ -18,19 +18,23 @@ Uplink deliberately ships a compact, feedback-loop-first toolset:
 
 | Endpoint | Tool | What it does |
 |---|---|---|
-| `GET /status` | `status` | Report the Editor: Unity version, platform, project, build target, active scene, play mode |
-| `POST /compile` | `compile` | Build the scripts and report compiler errors with file, line and column |
+| `GET /status` | `status` | Report the Editor: Unity version, platform, project, build target, active scene, unsaved changes, play mode |
+| `POST /compile` | `compile` | Build the scripts, follow the reload, and report compiler errors plus what the reload logged; `force: true` reloads even when nothing changed |
 | `GET /console` | `read_console` | Read console messages, filtered by severity and text, from a cursor so each is seen once |
 | `POST /tests` | `run_tests` | Run the EditMode or PlayMode suite and report which tests failed, and why |
-| `GET /screenshot` | `screenshot` | Capture a camera, the Game view or the Scene view as a PNG |
+| `GET /screenshot` | `screenshot` | Capture a camera, the Game view or the Scene view as a PNG — inline, cropped, or written to a file |
 | `GET /scene` | `read_scene` | List the objects in the open scenes, with their paths and components |
-| `GET /object` | `read_object` | Read one GameObject's components and their serialized values |
+| `GET /object` | `read_object` | Read one GameObject's components and their serialized values, narrowed to named fields or components |
 | `POST /play` | `set_play_mode` | Enter, leave, pause or step play mode |
 | `POST /refresh` | `refresh` | Make the Editor re-read files changed on disk, re-opening the open scenes |
 
 That's it, by design. The assistant writes code with its own file tools; Uplink tells it whether the code compiles, passes tests, and looks right.
 
 Four of these — `compile`, `run_tests`, `set_play_mode` and `refresh` — do something that outlives the request that asked for it, because compiling, importing and entering play mode reload the Editor's script domain and take the HTTP listener with them. They are therefore **called repeatedly rather than waited on**: the first call starts the work and answers `202`, and a later call returns the result and resets, so the call after that starts the next run. The tool descriptions in `/openapi.json` spell this out, so an assistant reading them gets it right without being told.
+
+`compile` in particular reports `done` only once the domain reload a successful build causes has finished, and its result carries what that reload logged — which is how `[InitializeOnLoadMethod]` setup scripts are driven and observed with one tool. Since such scripts silently do nothing in play mode, every `compile` and `refresh` response also says `isPlaying`.
+
+One sharp edge when driving these by hand: the .NET listener Uplink sits on rejects a `POST` that has no `Content-Length` at all with `411`, before Uplink sees it. `curl -X POST` alone sends none — add a body (`-d '{}'`) or `-H 'Content-Length: 0'`.
 
 ## Requirements
 
@@ -133,12 +137,16 @@ If you use Claude Code, add something like this to *your Unity project's* `CLAUD
 ```markdown
 ## Unity workflow
 - After editing any C# script, call uplink `compile` and fix every reported error before going on.
-  It answers 202 while it builds — call it again until `state` is `done`.
+  It answers 202 while it builds — call it again until `state` is `done`. The `done` result carries
+  the console output of the reload, so what an [InitializeOnLoadMethod] script logged arrives with it.
+- To re-run [InitializeOnLoadMethod] setup code when no script changed, call `compile` with
+  `force: true` instead of touching a file. If `isPlaying` is true, leave play mode first — reloads
+  run no setup code while the game plays.
 - Then call uplink `run_tests`; failures come back with the assertion message and stack trace.
-- Note the `nextSince` from uplink `read_console` before an action and pass it back afterwards,
-  to see only what that action logged.
-- Verify visuals with uplink `screenshot`, and check that a change landed on the object you meant
-  with uplink `read_scene` / `read_object`.
+- Verify visuals with uplink `screenshot` — pass `path` to write the PNG to a file you can read, and
+  `crop=x,y,w,h` to inspect a detail — and check that a change landed on the object you meant with
+  uplink `read_scene` / `read_object` (narrow with `fields=` / `components=`).
+- Check `sceneDirty` in uplink `status` when work must be saved, not only look right.
 - Never edit .unity, .prefab, or .asset YAML files directly.
 ```
 

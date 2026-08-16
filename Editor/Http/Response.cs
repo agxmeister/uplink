@@ -44,10 +44,23 @@ namespace Agxmeister.Uplink.Http
             return Text(status, JsonContentType, JsonConvert.SerializeObject(payload, Formatting.Indented));
         }
 
-        /// <summary>The one error shape the API produces, so every failure looks the same to a client.</summary>
+        /// <summary>
+        /// The one error shape the API produces, so every failure looks the same to a client. The status is
+        /// repeated inside the body, and a transient failure says it is worth retrying, because an adapter
+        /// between here and the model may swallow the status line and leave the body as the only evidence.
+        /// </summary>
         public static Response Error(int status, string message)
         {
-            return Json(status, new Dictionary<string, object> { { "error", message } });
+            var body = new Dictionary<string, object>
+            {
+                { "error", message },
+                { "status", status },
+            };
+            if (status == 503 || status == 504)
+            {
+                body["retry"] = true;
+            }
+            return Json(status, body);
         }
 
         public static Response Text(int status, string contentType, string body)

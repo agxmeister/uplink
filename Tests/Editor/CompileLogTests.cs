@@ -1,5 +1,6 @@
 using System;
 using Agxmeister.Uplink.Compilation;
+using Agxmeister.Uplink.Console;
 using Agxmeister.Uplink.Persistence;
 using NUnit.Framework;
 
@@ -177,6 +178,142 @@ namespace Agxmeister.Uplink.Tests
             Assert.AreEqual(CompileLog.Done, result.State);
             Assert.AreEqual(1, result.ErrorCount);
             Assert.AreEqual("Assets/Enemy.cs", result.Errors[0].File);
+        }
+
+        [Test]
+        public void DoesNotReportDoneUntilThePromisedReloadHasHappened()
+        {
+            var log = new CompileLog();
+            log.Advance(Start);
+            log.Started(Start);
+            // The build succeeded, so a domain reload is coming; done must wait for it.
+            log.ExpectReload(Start.AddSeconds(2));
+
+            Assert.AreEqual(CompileLog.Compiling, log.Advance(Start.AddSeconds(3)).Result.State);
+
+            log.Reloaded(Start.AddSeconds(4), false);
+            var result = log.Advance(Start.AddSeconds(5)).Result;
+
+            Assert.AreEqual(CompileLog.Done, result.State);
+            Assert.AreEqual(4000, result.DurationMs, "the run lasts through its reload");
+        }
+
+        [Test]
+        public void AForcedRunReportsItWasForcedAndThatNothingChanged()
+        {
+            var log = new CompileLog();
+
+            var outcome = log.Advance(Start, true);
+            Assert.IsTrue(outcome.ShouldTrigger);
+
+            // Nothing needed rebuilding, so the compiler never starts; the requested reload still happens.
+            log.ExpectReload(Start.AddSeconds(1));
+            log.Reloaded(Start.AddSeconds(2), false);
+
+            var result = log.Advance(Start.AddSeconds(3)).Result;
+
+            Assert.AreEqual(CompileLog.Done, result.State);
+            Assert.IsTrue(result.Forced);
+            Assert.IsFalse(result.Changed, "a forced reload is not a rebuild");
+        }
+
+        [Test]
+        public void DoesNotConcludeThereWasNothingToDoWhileAReloadIsPromised()
+        {
+            var log = new CompileLog();
+            log.Advance(Start, true);
+            log.ExpectReload(Start.AddSeconds(1));
+
+            Assert.IsFalse(
+                log.GaveUpWaiting(Start.AddSeconds(30), TimeSpan.FromSeconds(5), false),
+                "a forced run that never compiles is still waiting for its reload, not finished");
+        }
+
+        [Test]
+        public void StopsWaitingOnAReloadThatNeverComes()
+        {
+            var log = new CompileLog();
+            log.Advance(Start);
+            log.Started(Start);
+            log.ExpectReload(Start.AddSeconds(2));
+
+            var grace = TimeSpan.FromSeconds(15);
+            Assert.IsFalse(log.GaveUpOnReload(Start.AddSeconds(10), grace, false), "too early");
+            Assert.IsFalse(log.GaveUpOnReload(Start.AddSeconds(60), grace, true), "a busy Editor may still reload");
+            Assert.IsTrue(log.GaveUpOnReload(Start.AddSeconds(60), grace, false));
+        }
+
+        [Test]
+        public void HandsOverTheConsoleMessagesTheRunProduced()
+        {
+            var console = new ConsoleBuffer();
+            console.Record(ConsoleLevel.Log, "from before the run", null, Start);
+            var log = new CompileLog(console);
+
+            log.Advance(Start);
+            console.Record(ConsoleLevel.Log, "Stage 3: menu arrows rebuilt", null, Start.AddSeconds(1));
+            console.Record(ConsoleLevel.Log, "[Uplink] Serving http://localhost:8787/", null, Start.AddSeconds(2));
+            log.Started(Start);
+            log.ExpectReload(Start.AddSeconds(2));
+            log.Reloaded(Start.AddSeconds(3), false);
+
+            var result = log.Advance(Start.AddSeconds(4)).Result;
+
+            Assert.AreEqual(1, result.Console.Entries.Count, "only the run's own messages, minus Uplink's chatter");
+            Assert.AreEqual("Stage 3: menu arrows rebuilt", result.Console.Entries[0].Message);
+            Assert.AreEqual(1, result.Console.Counts.Logs, "counts drop what was filtered too");
+        }
+
+        [Test]
+        public void SaysNothingAboutTheConsoleWhileTheRunIsStillGoing()
+        {
+            var log = new CompileLog(new ConsoleBuffer());
+
+            Assert.IsNull(log.Advance(Start).Result.Console);
+        }
+
+        [Test]
+        public void WarnsWhenTheReloadRanDuringPlayMode()
+        {
+            var log = new CompileLog();
+            log.Advance(Start, true);
+            log.ExpectReload(Start.AddSeconds(1));
+            log.Reloaded(Start.AddSeconds(2), true);
+
+            var result = log.Advance(Start.AddSeconds(3)).Result;
+
+            Assert.IsNotNull(result.Note);
+            StringAssert.Contains("play mode", result.Note);
+        }
+
+        [Test]
+        public void ARunThatCrossedItsReloadSaysSoOnTheOtherSide()
+        {
+            var store = new InMemoryStore();
+            var before = new CompileLog();
+            before.Advance(Start);
+            before.Started(Start);
+            before.ExpectReload(Start.AddSeconds(2));
+            Stored.Write(store, "compile", before.Capture());
+
+            // The reload happens here; the far side must know to close the run out.
+            var after = new CompileLog();
+            after.Restore(Stored.Read<CompileState>(store, "compile"));
+
+            Assert.IsTrue(after.CrossedReload);
+
+            after.Reloaded(Start.AddSeconds(3), false);
+            Assert.IsFalse(after.CrossedReload);
+            Assert.AreEqual(CompileLog.Done, after.Advance(Start.AddSeconds(4)).Result.State);
+        }
+
+        [Test]
+        public void AFreshRunHasNotCrossedAnything()
+        {
+            var log = new CompileLog();
+            log.Advance(Start);
+
+            Assert.IsFalse(log.CrossedReload, "asked for but not started: no reload of ours has happened");
         }
 
         [Test]

@@ -21,6 +21,11 @@ namespace Agxmeister.Uplink.Tests
                 Asked = query;
                 return new ConsolePage { Entries = new List<ConsoleEntry>(), Counts = new ConsoleCounts() };
             }
+
+            public long Tail
+            {
+                get { return 0; }
+            }
         }
 
         private static Request Query(IDictionary<string, string> query)

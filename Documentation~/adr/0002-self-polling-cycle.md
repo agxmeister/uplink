@@ -1,6 +1,6 @@
 # ADR-0002 — Work that outlives a request is a self-polling cycle, not a job
 
-- **Status:** Accepted
+- **Status:** Accepted, amended by [ADR-0010](0010-compile-reports-the-reload-it-causes.md)
 - **Date:** 2026-08-01
 
 ## Context

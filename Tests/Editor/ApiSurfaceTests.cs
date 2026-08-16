@@ -23,7 +23,7 @@ namespace Agxmeister.Uplink.Tests
     {
         private sealed class NoCompiler : ICompiler
         {
-            public CompileResult Poll()
+            public CompileResult Poll(bool force)
             {
                 return new CompileResult { State = CompileLog.Compiling };
             }

@@ -71,6 +71,16 @@ namespace Agxmeister.Uplink.Tests
                             Enabled = null,
                             Properties = new Dictionary<string, object> { { "m_Mass", 1.5f } },
                         },
+                        new ComponentDetail
+                        {
+                            Type = "MeshRenderer",
+                            Enabled = true,
+                            Properties = new Dictionary<string, object>
+                            {
+                                { "m_Enabled", true },
+                                { "m_CastShadows", 1 },
+                            },
+                        },
                     },
                     Children = new List<string>(),
                 };
@@ -206,6 +216,86 @@ namespace Agxmeister.Uplink.Tests
                 Assert.IsNotNull(
                     component[field.Key], string.Format("component '{0}' is returned but not described.", field.Key));
             }
+        }
+
+        [Test]
+        public void NarrowsToTheFieldsAskedAbout()
+        {
+            var response = new ObjectEndpoint(new StubProbe()).Handle(Requests.Of(
+                "GET", "/object", new Dictionary<string, string>
+                {
+                    { "path", "/Player" },
+                    { "fields", "m_Mass" },
+                }));
+            var body = JObject.Parse(Encoding.UTF8.GetString(response.Body));
+
+            Assert.AreEqual(1, ((JArray)body["components"]).Count, "components with no matching field are noise");
+            Assert.AreEqual("Rigidbody", body["components"][0]["type"].Value<string>());
+            Assert.AreEqual(1.5f, body["components"][0]["properties"]["m_Mass"].Value<float>());
+            Assert.IsNull(body["components"][0]["properties"]["m_Enabled"]);
+        }
+
+        [Test]
+        public void NarrowsToTheComponentsAskedAbout()
+        {
+            var response = new ObjectEndpoint(new StubProbe()).Handle(Requests.Of(
+                "GET", "/object", new Dictionary<string, string>
+                {
+                    { "path", "/Player" },
+                    { "components", "meshrenderer" },
+                }));
+            var body = JObject.Parse(Encoding.UTF8.GetString(response.Body));
+
+            Assert.AreEqual(1, ((JArray)body["components"]).Count);
+            Assert.AreEqual(
+                "MeshRenderer", body["components"][0]["type"].Value<string>(), "names match case-insensitively");
+        }
+
+        [Test]
+        public void ANamedComponentAnswersEvenWhenNoFieldMatchesIt()
+        {
+            var response = new ObjectEndpoint(new StubProbe()).Handle(Requests.Of(
+                "GET", "/object", new Dictionary<string, string>
+                {
+                    { "path", "/Player" },
+                    { "components", "MeshRenderer" },
+                    { "fields", "m_Mass" },
+                }));
+            var body = JObject.Parse(Encoding.UTF8.GetString(response.Body));
+
+            Assert.AreEqual(1, ((JArray)body["components"]).Count);
+            Assert.AreEqual(
+                0, ((JObject)body["components"][0]["properties"]).Count,
+                "empty properties say 'that field is not here', which is the answer");
+        }
+
+        [Test]
+        public void AFilterThatMatchesNothingIsAnOrdinaryAnswer()
+        {
+            var response = new ObjectEndpoint(new StubProbe()).Handle(Requests.Of(
+                "GET", "/object", new Dictionary<string, string>
+                {
+                    { "path", "/Player" },
+                    { "fields", "m_NoSuchField" },
+                }));
+
+            Assert.AreEqual(200, response.Status);
+            Assert.AreEqual(
+                0,
+                ((JArray)JObject.Parse(Encoding.UTF8.GetString(response.Body))["components"]).Count);
+        }
+
+        [Test]
+        public void ObjectDescribesEveryParameterItAccepts()
+        {
+            var described = JObject.FromObject(new ObjectEndpoint(new StubProbe()).Describe());
+            var names = new List<string>();
+            foreach (var parameter in (JArray)described["parameters"])
+            {
+                names.Add(parameter["name"].Value<string>());
+            }
+
+            CollectionAssert.AreEquivalent(new[] { "path", "fields", "components" }, names);
         }
 
         [Test]

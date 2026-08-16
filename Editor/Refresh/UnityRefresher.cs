@@ -92,6 +92,7 @@ namespace Agxmeister.Uplink.Refresh
             // could be written. Left for the next tick, so the client is told a refresh has begun.
             refreshPending = refreshPending || outcome.ShouldTrigger;
 
+            outcome.Result.IsPlaying = IsPlaying;
             return outcome.Result;
         }
 

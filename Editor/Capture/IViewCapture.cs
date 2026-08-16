@@ -28,6 +28,24 @@ namespace Agxmeister.Uplink.Capture
         public int Width { get; set; }
 
         public int Height { get; set; }
+
+        /// <summary>Region of the rendered image to keep, or null for the whole image.</summary>
+        public CaptureRect Crop { get; set; }
+    }
+
+    /// <summary>
+    /// A region of a rendered image, in pixels from its top-left corner — the way image tools count, not the
+    /// way textures do. Rendering large and cropping small is how a detail gets inspected.
+    /// </summary>
+    public sealed class CaptureRect
+    {
+        public int X { get; set; }
+
+        public int Y { get; set; }
+
+        public int Width { get; set; }
+
+        public int Height { get; set; }
     }
 
     /// <summary>An image, and an honest account of where it came from.</summary>

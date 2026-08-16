@@ -29,7 +29,7 @@ namespace Agxmeister.Uplink
     [InitializeOnLoad]
     public static class Uplink
     {
-        public const string Version = "0.2.0";
+        public const string Version = "0.3.0";
 
         private const string Title = "Uplink";
         private const string Description = "MCP remote control for the Unity Editor.";
@@ -70,7 +70,8 @@ namespace Agxmeister.Uplink
             var console = new ConsoleBuffer();
             Services.Add(new ConsoleCollector(console, Store, new UnityConsoleHistory()));
 
-            var compiler = new UnityCompiler(new CompileLog(), Store);
+            // The compile log reads the console so a finished run can hand over what its reload logged.
+            var compiler = new UnityCompiler(new CompileLog(console), Store);
             Services.Add(compiler);
 
             var playMode = new UnityPlayMode();

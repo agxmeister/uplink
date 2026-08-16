@@ -1,6 +1,8 @@
 using System;
+using System.Text;
 using Agxmeister.Uplink.Api;
 using Agxmeister.Uplink.Http;
+using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
 namespace Agxmeister.Uplink.Tests
@@ -29,6 +31,30 @@ namespace Agxmeister.Uplink.Tests
             var barrier = new FaultBarrier(new Throwing(new TimeoutException("busy")), new SilentLog());
 
             Assert.AreEqual(504, barrier.Handle(Requests.Of("GET", "/status")).Status);
+        }
+
+        [Test]
+        public void EveryFailureCarriesItsStatusInTheBody()
+        {
+            // An adapter between here and the model may swallow the status line, so the body must be enough
+            // to tell a transient worth retrying from a real fault.
+            var barrier = new FaultBarrier(new Throwing(new TimeoutException("busy")), new SilentLog());
+            var body = JObject.Parse(Encoding.UTF8.GetString(barrier.Handle(Requests.Of("GET", "/status")).Body));
+
+            Assert.AreEqual("busy", body["error"].Value<string>());
+            Assert.AreEqual(504, body["status"].Value<int>());
+            Assert.IsTrue(body["retry"].Value<bool>());
+        }
+
+        [Test]
+        public void ARealFaultNamesItsExceptionAndDoesNotInviteARetry()
+        {
+            var barrier = new FaultBarrier(new Throwing(new InvalidOperationException("boom")), new SilentLog());
+            var body = JObject.Parse(Encoding.UTF8.GetString(barrier.Handle(Requests.Of("GET", "/status")).Body));
+
+            Assert.AreEqual("InvalidOperationException: boom", body["error"].Value<string>());
+            Assert.AreEqual(500, body["status"].Value<int>());
+            Assert.IsNull(body["retry"]);
         }
 
         [Test]

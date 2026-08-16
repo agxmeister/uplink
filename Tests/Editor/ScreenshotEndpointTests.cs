@@ -116,6 +116,93 @@ namespace Agxmeister.Uplink.Tests
         }
 
         [Test]
+        public void PassesTheCropThrough()
+        {
+            var capture = new StubCapture();
+
+            new ScreenshotEndpoint(capture).Handle(
+                Requests.With("GET", "/screenshot", "crop", "800,400,320,180"));
+
+            Assert.AreEqual(800, capture.Asked.Crop.X);
+            Assert.AreEqual(400, capture.Asked.Crop.Y);
+            Assert.AreEqual(320, capture.Asked.Crop.Width);
+            Assert.AreEqual(180, capture.Asked.Crop.Height);
+        }
+
+        [Test]
+        public void AsksForNoCropWhenNoneWasGiven()
+        {
+            var capture = new StubCapture();
+
+            new ScreenshotEndpoint(capture).Handle(Requests.Of("GET", "/screenshot"));
+
+            Assert.IsNull(capture.Asked.Crop);
+        }
+
+        [Test]
+        public void RefusesACropItCannotRead()
+        {
+            var endpoint = new ScreenshotEndpoint(new StubCapture());
+
+            Assert.Throws<BadRequestException>(
+                () => endpoint.Handle(Requests.With("GET", "/screenshot", "crop", "10,10")));
+            Assert.Throws<BadRequestException>(
+                () => endpoint.Handle(Requests.With("GET", "/screenshot", "crop", "10,10,0,50")));
+            Assert.Throws<BadRequestException>(
+                () => endpoint.Handle(Requests.With("GET", "/screenshot", "crop", "-1,10,50,50")));
+        }
+
+        [Test]
+        public void WritesThePngToAPathAndAnswersWithThePathInstead()
+        {
+            var endpoint = new ScreenshotEndpoint(new StubCapture());
+            var path = System.IO.Path.Combine(
+                System.IO.Path.Combine(System.IO.Path.GetTempPath(), "uplink-tests"), "shot.png");
+
+            try
+            {
+                var response = endpoint.Handle(Requests.With("GET", "/screenshot", "path", path));
+                var body = JObject.Parse(Encoding.UTF8.GetString(response.Body));
+
+                Assert.AreEqual(200, response.Status);
+                Assert.AreEqual("application/json", response.ContentType);
+                Assert.AreEqual(path, body["path"].Value<string>());
+                Assert.IsNull(body["image"], "nothing binary or base64 should cross the transport");
+                CollectionAssert.AreEqual(PngBytes, System.IO.File.ReadAllBytes(path));
+            }
+            finally
+            {
+                if (System.IO.File.Exists(path))
+                {
+                    System.IO.File.Delete(path);
+                }
+            }
+        }
+
+        [Test]
+        public void ReportsAPathItCannotWriteToAsTheClientsMistake()
+        {
+            var endpoint = new ScreenshotEndpoint(new StubCapture());
+
+            Assert.Throws<BadRequestException>(
+                () => endpoint.Handle(Requests.With("GET", "/screenshot", "path", "\0not-a-path")));
+        }
+
+        [Test]
+        public void DescribesEveryParameterItAccepts()
+        {
+            var described = JObject.FromObject(new ScreenshotEndpoint(new StubCapture()).Describe());
+            var names = new List<string>();
+            foreach (var parameter in (JArray)described["parameters"])
+            {
+                names.Add(parameter["name"].Value<string>());
+            }
+
+            CollectionAssert.AreEquivalent(
+                new[] { "view", "camera", "width", "height", "format", "path", "crop" }, names);
+        }
+
+        [Test]
         public void RefusesASizeItWillNotRender()
         {
             var endpoint = new ScreenshotEndpoint(new StubCapture());

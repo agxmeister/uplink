@@ -68,6 +68,14 @@ namespace Agxmeister.Uplink.Api
             return JsonContent(description, Object(new Dictionary<string, object>
             {
                 { "error", Property("string", "What went wrong.") },
+                { "status", Property("integer", "The HTTP status, repeated here in case the transport hides it.") },
+                {
+                    "retry",
+                    Property(
+                        "boolean",
+                        "Present and true when the failure is transient — the Editor was busy or " +
+                        "mid-reload — and the same call is worth making again.")
+                },
             }));
         }
 

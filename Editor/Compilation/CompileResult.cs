@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Agxmeister.Uplink.Console;
 using Newtonsoft.Json;
 
 namespace Agxmeister.Uplink.Compilation
@@ -20,6 +21,13 @@ namespace Agxmeister.Uplink.Compilation
         [JsonProperty("changed")]
         public bool Changed { get; set; }
 
+        /// <summary>
+        /// Whether the run was asked to reload the domain even if nothing changed. With `changed` this tells
+        /// a real rebuild from a forced reload from a run that did neither.
+        /// </summary>
+        [JsonProperty("forced")]
+        public bool Forced { get; set; }
+
         /// <summary>Every error the compiler produced, capped; <see cref="ErrorCount"/> is the true total.</summary>
         [JsonProperty("errors")]
         public IList<CompileMessage> Errors { get; set; }
@@ -36,6 +44,24 @@ namespace Agxmeister.Uplink.Compilation
         /// <summary>How long the run took, or 0 while it is still going.</summary>
         [JsonProperty("durationMs")]
         public long DurationMs { get; set; }
+
+        /// <summary>
+        /// Whether the Editor is in play mode right now. Set by the service at answer time, not part of the
+        /// stored cycle, because it describes the Editor rather than the run.
+        /// </summary>
+        [JsonProperty("isPlaying")]
+        public bool IsPlaying { get; set; }
+
+        /// <summary>Something the numbers alone would hide — today, that play mode suppressed setup code.</summary>
+        [JsonProperty("note", NullValueHandling = NullValueHandling.Ignore)]
+        public string Note { get; set; }
+
+        /// <summary>
+        /// What the Editor logged between the run being asked for and it finishing — above all, what the
+        /// reload's `[InitializeOnLoadMethod]` code said. Only on a finished run.
+        /// </summary>
+        [JsonProperty("console", NullValueHandling = NullValueHandling.Ignore)]
+        public ConsolePage Console { get; set; }
     }
 
     /// <summary>One thing the compiler had to say, and where.</summary>

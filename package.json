@@ -1,6 +1,6 @@
 {
   "name": "com.agxmeister.uplink",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "displayName": "Uplink",
   "description": "MCP remote control for the Unity Editor.",
   "unity": "2021.3",

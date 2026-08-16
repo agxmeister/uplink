@@ -15,14 +15,16 @@ useful part.
 | # | Decision | Status |
 |---|---|---|
 | [0001](0001-rest-api-described-by-openapi.md) | A REST API described by OpenAPI, with MCP left to an adapter | Accepted |
-| [0002](0002-self-polling-cycle.md) | Work that outlives a request is a self-polling cycle, not a job | Accepted |
+| [0002](0002-self-polling-cycle.md) | Work that outlives a request is a self-polling cycle, not a job | Accepted, amended by [0010](0010-compile-reports-the-reload-it-causes.md) |
 | [0003](0003-session-state-and-services.md) | State crosses a domain reload in `SessionState`, gathered by services | Accepted |
 | [0004](0004-console-collector-seeded-from-the-editor.md) | Uplink collects console messages itself, seeded once from the Editor's | Accepted |
-| [0005](0005-screenshots-render-a-camera.md) | Screenshots render a camera, and are base64 by default | Accepted |
+| [0005](0005-screenshots-render-a-camera.md) | Screenshots render a camera, and are base64 by default | Accepted, amended by [0011](0011-screenshots-can-land-on-disk.md) |
 | [0006](0006-test-framework-is-a-hard-dependency.md) | The Unity Test Framework is a hard package dependency | Accepted |
 | [0007](0007-scene-access-is-read-only.md) | Scene access is read-only | Accepted |
 | [0008](0008-endpoint-prose-is-the-interface.md) | An endpoint's prose is its interface | Accepted |
 | [0009](0009-refresh-reopens-open-scenes.md) | Refresh re-opens the open scenes | Accepted |
+| [0010](0010-compile-reports-the-reload-it-causes.md) | A finished compile reports the reload it caused | Accepted |
+| [0011](0011-screenshots-can-land-on-disk.md) | Screenshots can land on disk, and be cropped where they are rendered | Accepted |
 
 ## Why `Documentation~`
 

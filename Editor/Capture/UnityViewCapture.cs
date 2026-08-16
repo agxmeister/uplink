@@ -13,7 +13,7 @@ namespace Agxmeister.Uplink.Capture
             {
                 // Only worth trying while the game is running: outside play mode the Game view is not
                 // drawing, and the grab comes back empty or stale.
-                var grabbed = FromGameView();
+                var grabbed = FromGameView(request.Crop);
                 if (grabbed != null)
                 {
                     return grabbed;
@@ -62,9 +62,9 @@ namespace Agxmeister.Uplink.Capture
             return new CaptureResult
             {
                 View = view,
-                Width = request.Width,
-                Height = request.Height,
-                Png = Render(camera, request.Width, request.Height),
+                Width = request.Crop == null ? request.Width : request.Crop.Width,
+                Height = request.Crop == null ? request.Height : request.Crop.Height,
+                Png = Render(camera, request.Width, request.Height, request.Crop),
             };
         }
 
@@ -107,7 +107,7 @@ namespace Agxmeister.Uplink.Capture
         /// Renders through a texture of our own rather than reading the screen, so the size is what was asked
         /// for and no window has to be open, focused or even drawing.
         /// </summary>
-        private static byte[] Render(Camera camera, int width, int height)
+        private static byte[] Render(Camera camera, int width, int height, CaptureRect crop)
         {
             var target = new RenderTexture(width, height, 24, RenderTextureFormat.ARGB32);
             var previousTarget = camera.targetTexture;
@@ -124,7 +124,7 @@ namespace Agxmeister.Uplink.Capture
                 image.ReadPixels(new Rect(0f, 0f, width, height), 0, 0);
                 image.Apply();
 
-                return image.EncodeToPNG();
+                return Encoded(image, crop);
             }
             finally
             {
@@ -142,7 +142,7 @@ namespace Agxmeister.Uplink.Capture
             }
         }
 
-        private static CaptureResult FromGameView()
+        private static CaptureResult FromGameView(CaptureRect crop)
         {
             var image = ScreenCapture.CaptureScreenshotAsTexture();
             if (image == null)
@@ -155,14 +155,46 @@ namespace Agxmeister.Uplink.Capture
                 return new CaptureResult
                 {
                     View = CaptureView.Game,
-                    Width = image.width,
-                    Height = image.height,
-                    Png = image.EncodeToPNG(),
+                    Width = crop == null ? image.width : crop.Width,
+                    Height = crop == null ? image.height : crop.Height,
+                    Png = Encoded(image, crop),
                 };
             }
             finally
             {
                 Object.DestroyImmediate(image);
+            }
+        }
+
+        /// <summary>
+        /// The image as PNG, cut down to <paramref name="crop"/> when one was given. The crop counts pixels
+        /// from the top-left corner the way image tools do; texture rows start at the bottom, hence the
+        /// flipped Y.
+        /// </summary>
+        private static byte[] Encoded(Texture2D image, CaptureRect crop)
+        {
+            if (crop == null)
+            {
+                return image.EncodeToPNG();
+            }
+
+            if (crop.X + crop.Width > image.width || crop.Y + crop.Height > image.height)
+            {
+                throw new BadRequestException(string.Format(
+                    "The crop at {0},{1} sized {2}x{3} does not fit inside the {4}x{5} image.",
+                    crop.X, crop.Y, crop.Width, crop.Height, image.width, image.height));
+            }
+
+            var cut = new Texture2D(crop.Width, crop.Height, TextureFormat.RGB24, false);
+            try
+            {
+                cut.SetPixels(image.GetPixels(crop.X, image.height - crop.Y - crop.Height, crop.Width, crop.Height));
+                cut.Apply();
+                return cut.EncodeToPNG();
+            }
+            finally
+            {
+                Object.DestroyImmediate(cut);
             }
         }
     }

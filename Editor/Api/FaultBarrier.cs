@@ -49,7 +49,9 @@ namespace Agxmeister.Uplink.Api
             catch (Exception exception)
             {
                 log.Error(string.Format("{0} {1} failed: {2}", request.Method, request.Path, exception));
-                return Response.Error(500, exception.Message);
+                // The type name goes with the message: "Object reference not set" alone says nothing about
+                // what failed, and this line is all a client will ever see of the stack trace logged above.
+                return Response.Error(500, string.Format("{0}: {1}", exception.GetType().Name, exception.Message));
             }
         }
     }

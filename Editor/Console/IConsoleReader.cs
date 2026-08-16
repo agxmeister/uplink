@@ -7,6 +7,12 @@ namespace Agxmeister.Uplink.Console
     public interface IConsoleReader
     {
         ConsolePage Read(ConsoleQuery query);
+
+        /// <summary>
+        /// The position the next message will take. Note it before setting something off, and reading from it
+        /// afterwards yields exactly what that something logged.
+        /// </summary>
+        long Tail { get; }
     }
 
     /// <summary>What the client asked for, gathered into one value rather than five parameters.</summary>

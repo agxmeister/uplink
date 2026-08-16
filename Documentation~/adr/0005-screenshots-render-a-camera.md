@@ -1,6 +1,6 @@
 # ADR-0005 — Screenshots render a camera, and are base64 by default
 
-- **Status:** Accepted
+- **Status:** Accepted, amended by [ADR-0011](0011-screenshots-can-land-on-disk.md)
 - **Date:** 2026-08-01
 
 ## Context

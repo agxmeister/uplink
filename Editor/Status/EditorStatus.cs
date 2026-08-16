@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Newtonsoft.Json;
 
 namespace Agxmeister.Uplink.Status
@@ -28,6 +29,17 @@ namespace Agxmeister.Uplink.Status
 
         [JsonProperty("activeScene")]
         public string ActiveScene { get; set; }
+
+        /// <summary>
+        /// Whether the active scene holds edits that have not reached its file. Play mode and screenshots run
+        /// the in-memory scene, so work can look finished and still not be persisted.
+        /// </summary>
+        [JsonProperty("sceneDirty")]
+        public bool SceneDirty { get; set; }
+
+        /// <summary>Every open scene with unsaved changes, for projects with more than one open.</summary>
+        [JsonProperty("dirtyScenes")]
+        public IList<string> DirtyScenes { get; set; }
 
         [JsonProperty("isPlaying")]
         public bool IsPlaying { get; set; }

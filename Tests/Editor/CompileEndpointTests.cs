@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 using Agxmeister.Uplink.Compilation;
+using Agxmeister.Uplink.Console;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
@@ -18,8 +19,11 @@ namespace Agxmeister.Uplink.Tests
                 this.result = result;
             }
 
-            public CompileResult Poll()
+            public bool? AskedToForce { get; private set; }
+
+            public CompileResult Poll(bool force)
             {
+                AskedToForce = force;
                 return result;
             }
         }
@@ -40,6 +44,7 @@ namespace Agxmeister.Uplink.Tests
             {
                 State = CompileLog.Done,
                 Changed = true,
+                Forced = false,
                 Errors = new List<CompileMessage>
                 {
                     new CompileMessage
@@ -55,6 +60,17 @@ namespace Agxmeister.Uplink.Tests
                 Warnings = new List<CompileMessage>(),
                 ErrorCount = 1,
                 DurationMs = 2400,
+                IsPlaying = true,
+                Note = "Play mode was on.",
+                // Filled in so the field-versus-description assertion below covers it.
+                Console = new ConsolePage
+                {
+                    Entries = new List<ConsoleEntry>(),
+                    NextSince = 7,
+                    Truncated = false,
+                    HistoryAvailable = false,
+                    Counts = new ConsoleCounts(),
+                },
             };
         }
 
@@ -109,6 +125,36 @@ namespace Agxmeister.Uplink.Tests
             var described = JObject.FromObject(new CompileEndpoint(new StubCompiler(Running())).Describe());
 
             Assert.IsNotNull(described["responses"]["202"], "202 is answered, so it must be described");
+        }
+
+        [Test]
+        public void AsksForAForcedReloadWhenTheBodySaysSo()
+        {
+            var compiler = new StubCompiler(Running());
+
+            new CompileEndpoint(compiler).Handle(Requests.Of("POST", "/compile", "{\"force\": true}"));
+
+            Assert.IsTrue(compiler.AskedToForce.Value);
+        }
+
+        [Test]
+        public void TreatsAMissingBodyAsAnOrdinaryRun()
+        {
+            var compiler = new StubCompiler(Running());
+
+            new CompileEndpoint(compiler).Handle(Requests.Of("POST", "/compile"));
+
+            Assert.IsFalse(compiler.AskedToForce.Value);
+        }
+
+        [Test]
+        public void DescribesTheForceOptionItReads()
+        {
+            var described = JObject.FromObject(new CompileEndpoint(new StubCompiler(Running())).Describe());
+
+            Assert.IsNotNull(
+                described["requestBody"]["content"]["application/json"]["schema"]["properties"]["force"],
+                "'force' is read but not described.");
         }
     }
 }

@@ -39,6 +39,17 @@ namespace Agxmeister.Uplink.Console
         /// </summary>
         public bool HistoryAvailable { get; set; }
 
+        public long Tail
+        {
+            get
+            {
+                lock (gate)
+                {
+                    return nextSeq;
+                }
+            }
+        }
+
         /// <summary>Appends a message, stamping it with its position in the stream.</summary>
         public void Record(string level, string message, string stackTrace, DateTime time)
         {

@@ -13,6 +13,11 @@ namespace Agxmeister.Uplink.Compilation
     /// It is a service because the interesting part happens while nobody is asking: a compile reloads the
     /// domain, taking the listener and every static with it, so the messages have to be written to the
     /// session store as they arrive rather than collected when a request finally comes back.
+    ///
+    /// A run does not end at the compiler's last word. A successful build is followed by a domain reload, and
+    /// the reload is the half a client actually waits for — it is what re-runs `[InitializeOnLoadMethod]`
+    /// setup code. So the run is closed on the far side of the reload, a couple of quiet ticks in, once that
+    /// code has had its say.
     /// </summary>
     public sealed class UnityCompiler : IUplinkService, ICompiler
     {
@@ -24,11 +29,26 @@ namespace Agxmeister.Uplink.Compilation
         /// </summary>
         private static readonly TimeSpan Grace = TimeSpan.FromSeconds(5);
 
+        /// <summary>
+        /// How long a promised reload may fail to arrive before the run stops waiting for it. Generous,
+        /// because a reload that is coming at all comes within a frame or two — this only fires when the
+        /// Editor decided not to reload after all, and `compiling` forever would be worse than a late answer.
+        /// </summary>
+        private static readonly TimeSpan ReloadGrace = TimeSpan.FromSeconds(15);
+
+        /// <summary>
+        /// How many quiet ticks to let pass after a reload before handing the outcome over, so that work the
+        /// reload deferred — `EditorApplication.delayCall`, first-update stages — gets to log first.
+        /// </summary>
+        private const int SettleTicks = 2;
+
         private readonly CompileLog log;
         private readonly ISessionStore store;
 
         private bool attached;
         private bool refreshPending;
+        private bool forcePending;
+        private int settling;
 
         public UnityCompiler(CompileLog log, ISessionStore store)
         {
@@ -71,28 +91,32 @@ namespace Agxmeister.Uplink.Compilation
             Persist();
         }
 
-        public CompileResult Poll()
+        public CompileResult Poll(bool force)
         {
-            var outcome = log.Advance(DateTime.UtcNow);
+            var outcome = log.Advance(DateTime.UtcNow, force);
             Persist();
 
             // Refreshing here would reload the domain inside this call, closing the listener before the
             // answer could be written. Left for the next tick, so the client is told a compile has begun.
             refreshPending = refreshPending || outcome.ShouldTrigger;
+            forcePending = forcePending || (outcome.ShouldTrigger && force);
 
+            outcome.Result.IsPlaying = EditorApplication.isPlaying;
             return outcome.Result;
         }
 
         /// <summary>
-        /// A run left mid-flight by a reload nobody told us about would otherwise report `compiling` for the
-        /// rest of the session. Whatever was recorded before it vanished is a better answer than none.
+        /// Being here at all proves the last domain reload is over, so a run that crossed it — waiting for
+        /// its promised reload, or cut off mid-build — is ready to be closed. Not immediately, though: the
+        /// setup code the reload re-runs may still be logging, so the outcome is handed over after a couple
+        /// of quiet ticks instead. Until then the endpoint keeps answering 202, which a polling client takes
+        /// in stride, where done-before-the-logs would mislead it.
         /// </summary>
         private void Recover()
         {
-            if (log.Phase == CompileLog.Compiling && !log.AwaitingStart && !EditorApplication.isCompiling)
+            if (log.CrossedReload && !EditorApplication.isCompiling)
             {
-                log.Completed(DateTime.UtcNow);
-                Persist();
+                settling = SettleTicks;
             }
         }
 
@@ -101,16 +125,51 @@ namespace Agxmeister.Uplink.Compilation
             if (refreshPending)
             {
                 refreshPending = false;
+                var forced = forcePending;
+                forcePending = false;
+
                 // Refresh rather than RequestScriptCompilation: it rebuilds only what changed, so calling the
                 // tool again when nothing has been edited costs nothing.
                 AssetDatabase.Refresh();
+
+                if (forced)
+                {
+                    // Refresh alone will not reload when nothing changed, and the reload is the point of
+                    // `force`. Asking for both is safe — Unity folds the request into the reload a build
+                    // causes anyway when something did change.
+                    log.ExpectReload(DateTime.UtcNow);
+                    Persist();
+                    EditorUtility.RequestScriptReload();
+                }
                 return;
             }
 
             var busy = EditorApplication.isUpdating || EditorApplication.isCompiling;
+
+            if (settling > 0)
+            {
+                if (busy)
+                {
+                    return;
+                }
+                settling--;
+                if (settling == 0)
+                {
+                    log.Reloaded(DateTime.UtcNow, EditorApplication.isPlayingOrWillChangePlaymode);
+                    Persist();
+                }
+                return;
+            }
+
             if (log.GaveUpWaiting(DateTime.UtcNow, Grace, busy))
             {
                 log.Completed(DateTime.UtcNow);
+                Persist();
+            }
+
+            if (log.GaveUpOnReload(DateTime.UtcNow, ReloadGrace, busy))
+            {
+                log.Reloaded(DateTime.UtcNow, EditorApplication.isPlayingOrWillChangePlaymode);
                 Persist();
             }
         }
@@ -151,7 +210,17 @@ namespace Agxmeister.Uplink.Compilation
 
         private void OnFinished(object context)
         {
-            log.Completed(DateTime.UtcNow);
+            if (log.HasErrors)
+            {
+                // Errors mean the old assemblies stay and no reload follows: this is the whole outcome.
+                log.Completed(DateTime.UtcNow);
+            }
+            else
+            {
+                // A successful build reloads the domain, and what the reload logs is part of the answer, so
+                // the run stays open. `Recover` on the far side is what closes it.
+                log.ExpectReload(DateTime.UtcNow);
+            }
             Persist();
         }
 

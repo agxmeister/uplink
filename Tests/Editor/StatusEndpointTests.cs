@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text;
 using Agxmeister.Uplink.Status;
 using Newtonsoft.Json.Linq;
@@ -17,6 +18,8 @@ namespace Agxmeister.Uplink.Tests
             ProjectPath = "/projects/demo/Assets",
             ActiveBuildTarget = "StandaloneOSX",
             ActiveScene = "Assets/Scenes/Main.unity",
+            SceneDirty = true,
+            DirtyScenes = new List<string> { "Assets/Scenes/Main.unity" },
             IsPlaying = true,
             IsPaused = false,
             IsCompiling = false,

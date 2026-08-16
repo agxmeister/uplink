@@ -160,6 +160,13 @@ namespace Agxmeister.Uplink.Refresh
                         }))
                 },
                 { "durationMs", Schema.Property("integer", "How long the finished refresh took.") },
+                {
+                    "isPlaying",
+                    Schema.Property(
+                        "boolean",
+                        "Whether the Editor is in play mode right now. While it is, [InitializeOnLoadMethod] " +
+                        "setup code silently does nothing, so leave play mode before relying on it.")
+                },
             });
         }
 

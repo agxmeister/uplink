@@ -39,11 +39,12 @@ namespace Agxmeister.Uplink.Console
                 "read_console",
                 "Read messages the Unity Editor has logged.",
                 "Returns Editor console messages — errors, warnings and logs — oldest first.\n\n" +
-                "Messages form a numbered stream. Every response carries `nextSince`; pass it back as " +
-                "`since` on the next call to see only what has happened in between. Read `nextSince` " +
-                "before making a change, then read again afterwards, and the result is exactly what that " +
-                "change produced. When `truncated` is true there is more waiting: call again with the " +
-                "returned `nextSince`.\n\n" +
+                "Messages form a numbered stream. Every response carries `nextSince`, which is one past " +
+                "the last message returned; pass it back as `since` — which is inclusive — and the result " +
+                "is exactly what has been logged in between, each message seen once. When nothing new has " +
+                "been logged, `entries` is empty and `nextSince` comes back unchanged, so an empty answer " +
+                "reliably means \"nothing happened\", never \"asked one message too far\". When " +
+                "`truncated` is true there is more waiting: call again with the returned `nextSince`.\n\n" +
                 "`counts` reports every level that matched, whatever `level` was asked for, so a call for " +
                 "errors alone still reveals that warnings exist.",
                 new Dictionary<string, object>
@@ -57,7 +58,9 @@ namespace Agxmeister.Uplink.Console
                         "level", "Minimum severity to return; 'log' returns everything.",
                         Schema.Choice("Minimum severity.", ConsoleLevel.All, ConsoleLevel.Log), false),
                     Schema.QueryParameter(
-                        "since", "Return only messages at or after this position in the stream.",
+                        "since",
+                        "Return only messages at or after this position in the stream — inclusive, so " +
+                        "passing a 'nextSince' back yields exactly what is new and nothing twice.",
                         Schema.Property("integer", "A 'nextSince' from an earlier call.", 0), false),
                     Schema.QueryParameter(
                         "limit", "How many messages to return at most.",
@@ -86,7 +89,11 @@ namespace Agxmeister.Uplink.Console
             }));
         }
 
-        private static IDictionary<string, object> PageSchema()
+        /// <summary>
+        /// The schema of a page of console messages. Public because `compile` hands the same shape over as
+        /// part of a finished run, and one description keeps the two from drifting apart.
+        /// </summary>
+        public static IDictionary<string, object> PageSchema()
         {
             return Schema.Object(new Dictionary<string, object>
             {
@@ -101,7 +108,13 @@ namespace Agxmeister.Uplink.Console
                             { "stackTrace", Schema.Property("string", "Where an error came from.") },
                         }))
                 },
-                { "nextSince", Schema.Property("integer", "Pass as 'since' next time to see only what is new.") },
+                {
+                    "nextSince",
+                    Schema.Property(
+                        "integer",
+                        "One past the last message returned; unchanged when nothing was. Pass as 'since' " +
+                        "next time to see only what is new.")
+                },
                 { "truncated", Schema.Property("boolean", "More matched than 'limit'; call again with 'nextSince'.") },
                 {
                     "historyAvailable",

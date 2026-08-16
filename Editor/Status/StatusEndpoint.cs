@@ -37,7 +37,9 @@ namespace Agxmeister.Uplink.Status
                 "status",
                 "Report the state of the connected Unity Editor.",
                 "Returns the Unity version, platform, project, active build target, active scene and play mode " +
-                "of the Editor instance serving this API.",
+                "of the Editor instance serving this API.\n\n" +
+                "`sceneDirty` answers \"is my work persisted?\": play mode and screenshots run the in-memory " +
+                "scene, so a scene can look right and still hold changes that never reached its file.",
                 Schema.Object(new Dictionary<string, object>
                 {
                     { "uplinkVersion", Schema.Property("string", "Version of the Uplink package.") },
@@ -47,6 +49,16 @@ namespace Agxmeister.Uplink.Status
                     { "projectPath", Schema.Property("string", "Absolute path of the project's Assets folder.") },
                     { "activeBuildTarget", Schema.Property("string", "Currently selected build target.") },
                     { "activeScene", Schema.Property("string", "Path of the active scene, or its name when unsaved.") },
+                    {
+                        "sceneDirty",
+                        Schema.Property("boolean", "Whether the active scene has changes not yet saved to its file.")
+                    },
+                    {
+                        "dirtyScenes",
+                        Schema.Array(
+                            "Every open scene with unsaved changes.",
+                            Schema.Property("string", "The scene's path, or its name when never saved."))
+                    },
                     { "isPlaying", Schema.Property("boolean", "Whether the Editor is in play mode.") },
                     { "isPaused", Schema.Property("boolean", "Whether play mode is paused.") },
                     { "isCompiling", Schema.Property("boolean", "Whether scripts are being compiled.") },

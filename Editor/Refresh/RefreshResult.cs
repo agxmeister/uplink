@@ -19,5 +19,12 @@ namespace Agxmeister.Uplink.Refresh
 
         [JsonProperty("durationMs")]
         public long DurationMs { get; set; }
+
+        /// <summary>
+        /// Whether the Editor is in play mode right now. Set by the service at answer time, not part of the
+        /// stored cycle, because it describes the Editor rather than the run.
+        /// </summary>
+        [JsonProperty("isPlaying")]
+        public bool IsPlaying { get; set; }
     }
 }

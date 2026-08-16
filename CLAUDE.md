@@ -89,6 +89,13 @@ The result is delivered exactly once, so the call after it unambiguously means "
 client tell "not finished" from "finished" without reading the body. The state lives in `ISessionStore`, whose
 lifetime — surviving a reload, cleared on Editor restart — is exactly right for it.
 
+For `compile`, "the work" does not end at the compiler's last word: a successful build reloads the domain, and
+the reload is what re-runs `[InitializeOnLoadMethod]` setup code. So the run stays `202` until a couple of
+quiet ticks after the reload, and the `done` result carries a `console` page of everything the run logged —
+see [ADR-0010](Documentation~/adr/0010-compile-reports-the-reload-it-causes.md). `{"force": true}` reloads
+even when nothing changed, which is how such setup code is re-run without touching a file. And because play
+mode makes those reloads silently run nothing, `compile` and `refresh` report `isPlaying` in every response.
+
 `set_play_mode` is the exception that proves the rule: it needs no stored state, because the Editor itself
 records whether it is playing. It compares what was asked for with what is, and asks again if they differ.
 
@@ -172,3 +179,7 @@ see is a tool that does not exist.
 - **No authentication.** The `http://localhost:{port}/` prefix binds loopback only, but any local process —
   including a browser page — can reach the API. Fine for a dev tool; revisit if a mutating endpoint ever does
   something expensive or destructive.
+- **A `POST` with no `Content-Length` is answered `411` before Uplink runs.** Mono's `HttpListener` rejects it
+  while parsing the request, so no code in this repository can accept it; `curl -X POST` alone sends none.
+  This is documented for clients (send `-d '{}'`) rather than fixed, because fixing it means leaving
+  `HttpListener`.

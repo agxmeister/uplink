@@ -135,6 +135,67 @@ namespace Agxmeister.Uplink.Tests
         }
 
         [Test]
+        public void LookingAtAnIdleCycleStartsNothing()
+        {
+            var log = new CompileLog();
+
+            for (var i = 0; i < 10; i++)
+            {
+                var seen = log.Observe();
+                Assert.AreEqual(CompileLog.Idle, seen.State, "nothing is running and nothing is waiting");
+                Assert.IsTrue(seen.Stale.Value);
+            }
+
+            Assert.IsTrue(log.Advance(Start).ShouldTrigger, "the cycle was left where it was: this starts a run");
+        }
+
+        [Test]
+        public void LookingAtAFinishedRunDoesNotTakeDeliveryOfIt()
+        {
+            var log = Failed();
+
+            var seen = log.Observe();
+            Assert.AreEqual(CompileLog.Done, seen.State, "a result is waiting for whoever posts next");
+            Assert.AreEqual(1, seen.ErrorCount);
+            Assert.IsTrue(seen.Stale.Value);
+            Assert.AreEqual(CompileLog.Done, log.Observe().State, "looking twice sees the same result");
+
+            var handed = log.Advance(Start.AddSeconds(4));
+
+            Assert.AreEqual(CompileLog.Done, handed.Result.State, "the hand-over still had its result to give");
+            Assert.IsNull(handed.Result.Stale, "the hand-over is not a read");
+            Assert.IsFalse(handed.ShouldTrigger);
+        }
+
+        [Test]
+        public void LookingAfterTheHandOverStillShowsWhatTheRunFound()
+        {
+            var log = Failed();
+            log.Advance(Start.AddSeconds(4));
+
+            var seen = log.Observe();
+
+            Assert.AreEqual(CompileLog.Idle, seen.State, "the result was collected: the next post builds again");
+            Assert.AreEqual(1, seen.ErrorCount, "the error already standing is still the truth");
+            Assert.AreEqual(3000, seen.DurationMs);
+            Assert.IsTrue(seen.Stale.Value);
+        }
+
+        [Test]
+        public void LookingWhileARunIsGoingReportsProgressAndNothingStale()
+        {
+            var log = new CompileLog();
+            log.Advance(Start);
+            log.Started(Start);
+
+            var seen = log.Observe();
+
+            Assert.AreEqual(CompileLog.Compiling, seen.State);
+            Assert.IsNull(seen.Stale, "progress is live, not a result someone else was given");
+            Assert.IsNull(seen.Console, "the run's log belongs to its outcome");
+        }
+
+        [Test]
         public void WaitsForTheCompilerBeforeConcludingThereIsNothingToDo()
         {
             var log = new CompileLog();

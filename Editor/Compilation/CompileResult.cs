@@ -5,8 +5,8 @@ using Newtonsoft.Json;
 namespace Agxmeister.Uplink.Compilation
 {
     /// <summary>
-    /// What `POST /compile` answers with. Property names are the wire contract described by
-    /// <see cref="CompileEndpoint.Describe"/>.
+    /// What both calls on `/compile` answer with — `POST`, which acts, and `GET`, which only looks. Property
+    /// names are the wire contract described by <see cref="CompileEndpoint.Describe"/>.
     /// </summary>
     public sealed class CompileResult
     {
@@ -51,6 +51,14 @@ namespace Agxmeister.Uplink.Compilation
         /// </summary>
         [JsonProperty("isPlaying")]
         public bool IsPlaying { get; set; }
+
+        /// <summary>
+        /// Present and true when this result was looked at rather than handed over: `GET /compile` observes
+        /// the cycle without consuming it, so the same result can be read again, and — while `state` is
+        /// `done` — a `POST` may still deliver it. Absent from the hand-over itself.
+        /// </summary>
+        [JsonProperty("stale", NullValueHandling = NullValueHandling.Ignore)]
+        public bool? Stale { get; set; }
 
         /// <summary>Something the numbers alone would hide — today, that play mode suppressed setup code.</summary>
         [JsonProperty("note", NullValueHandling = NullValueHandling.Ignore)]

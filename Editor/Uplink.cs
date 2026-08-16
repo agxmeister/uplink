@@ -29,7 +29,7 @@ namespace Agxmeister.Uplink
     [InitializeOnLoad]
     public static class Uplink
     {
-        public const string Version = "0.3.0";
+        public const string Version = "0.4.0";
 
         private const string Title = "Uplink";
         private const string Description = "MCP remote control for the Unity Editor.";
@@ -90,6 +90,8 @@ namespace Agxmeister.Uplink
             // Reads its own buffer rather than the Editor, so it needs no main thread and no timeout.
             Endpoints.Add(new ConsoleEndpoint(console));
             Endpoints.Add(OnMainThread(new CompileEndpoint(compiler)));
+            // The same path, read-only: GET observes the compile cycle where POST drives it.
+            Endpoints.Add(OnMainThread(new CompileStatusEndpoint(compiler)));
             Endpoints.Add(OnMainThread(new PlayModeEndpoint(new PlayModeControl(playMode))));
             Endpoints.Add(OnMainThread(new ScreenshotEndpoint(new UnityViewCapture())));
             Endpoints.Add(OnMainThread(new RefreshEndpoint(refresher)));

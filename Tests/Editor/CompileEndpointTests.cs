@@ -26,6 +26,11 @@ namespace Agxmeister.Uplink.Tests
                 AskedToForce = force;
                 return result;
             }
+
+            public CompileResult Peek()
+            {
+                throw new AssertionException("the acting call must not merely look");
+            }
         }
 
         private static CompileResult Running()

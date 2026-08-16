@@ -171,6 +171,21 @@ namespace Agxmeister.Uplink.Compilation
             }
         }
 
+        /// <summary>
+        /// Reports where the cycle stands and changes nothing: no run is started, and a result waiting to be
+        /// handed over stays waiting. This is the read half of the cycle — `GET /compile` — and its answer
+        /// names <see cref="Idle"/> as a state of its own, which <see cref="Advance"/> never does, because to
+        /// an observer the difference between "a result is waiting for you" and "nothing is" is the whole
+        /// point: it says whether the next `POST` hands over or builds again.
+        /// </summary>
+        public CompileResult Observe()
+        {
+            lock (gate)
+            {
+                return Report(true);
+            }
+        }
+
         /// <summary>The compiler has begun, so whatever it said last time no longer describes the project.</summary>
         public void Started(DateTime now)
         {
@@ -295,6 +310,15 @@ namespace Agxmeister.Uplink.Compilation
         /// <summary>Must be called under the lock.</summary>
         private CompileResult Report()
         {
+            return Report(false);
+        }
+
+        /// <summary>
+        /// Must be called under the lock. <paramref name="observing"/> is a read rather than a hand-over: it
+        /// may report the resting <see cref="Idle"/> state, and marks whatever it returns as not delivered.
+        /// </summary>
+        private CompileResult Report(bool observing)
+        {
             var errors = new List<CompileMessage>();
             var warnings = new List<CompileMessage>();
             var errorCount = 0;
@@ -329,20 +353,25 @@ namespace Agxmeister.Uplink.Compilation
 
             var done = state.Phase == Done;
 
+            // Nothing in flight and nothing waiting to be handed over: the numbers below, if there are any,
+            // describe the last run, which an observer was never given.
+            var resting = observing && state.Phase == Idle;
+
             return new CompileResult
             {
-                // `idle` is an internal resting place, never something a caller is told: a call that finds it
-                // has already started the next run.
-                State = done ? Done : Compiling,
+                // To a caller that acts, `idle` is an internal resting place it never sees: a call that finds
+                // it has already started the next run. To one that only looks, it is the answer.
+                State = observing ? state.Phase : (done ? Done : Compiling),
                 Changed = state.Changed,
                 Forced = state.Forced,
                 Errors = errors,
                 Warnings = warnings,
                 ErrorCount = errorCount,
                 WarningCount = warningCount,
-                DurationMs = done ? state.DurationMs : 0,
+                DurationMs = done || resting ? state.DurationMs : 0,
+                Stale = observing && (done || resting) ? true : (bool?)null,
                 Console = done ? SinceTheRunBegan() : null,
-                Note = done && state.ReloadedWhilePlaying
+                Note = (done || resting) && state.ReloadedWhilePlaying
                     ? "This run's reload happened while play mode was on, where [InitializeOnLoadMethod] "
                         + "setup code silently does nothing. If such code was supposed to run, leave play "
                         + "mode and compile again with force: true."

@@ -49,7 +49,10 @@ namespace Agxmeister.Uplink.Compilation
                 "carries `console` — everything the Editor logged during the run, the same objects " +
                 "`read_console` returns — so what a setup script printed arrives with the result and needs " +
                 "no separate console read. That result is handed over once; the call after it starts a " +
-                "fresh run.\n\n" +
+                "fresh run — so to watch a run without ever risking a build nobody asked for, poll with " +
+                "`GET /compile`, which reports the same states and never acts. (Send a body, even `{}`: a " +
+                "POST with no `Content-Length` at all is rejected with `411` before this endpoint sees it.)" +
+                "\n\n" +
                 "`changed: false` means nothing needed rebuilding, so no reload happened and no setup code " +
                 "ran. To re-run it anyway — the next stage of a staged setup script, say — post " +
                 "`{\"force\": true}`, which reloads the domain even when no script changed; the result " +
@@ -61,8 +64,8 @@ namespace Agxmeister.Uplink.Compilation
                 "later runtime errors appear in `read_console`.",
                 new Dictionary<string, object>
                 {
-                    { "200", Schema.JsonContent("A finished run: the build's messages and the reload's log.", ResultSchema()) },
-                    { "202", Schema.JsonContent("A run has begun or is under way. Call again for the outcome.", ResultSchema()) },
+                    { "200", Schema.JsonContent("A finished run: the build's messages and the reload's log.", ResultSchema(false)) },
+                    { "202", Schema.JsonContent("A run has begun or is under way. Call again for the outcome.", ResultSchema(false)) },
                     { "504", Schema.ErrorContent("The Editor was too busy to answer. Retry.") },
                 },
                 null,
@@ -90,13 +93,28 @@ namespace Agxmeister.Uplink.Compilation
             return Response.Json(result.State == CompileLog.Done ? 200 : 202, result);
         }
 
-        private static IDictionary<string, object> ResultSchema()
+        /// <summary>
+        /// The shape of a compile result, shared with <see cref="CompileStatusEndpoint"/> so the two calls on
+        /// `/compile` cannot describe the same payload differently. <paramref name="observed"/> is the read-only
+        /// view, which has a resting state to report and marks what it returns as not handed over.
+        /// </summary>
+        public static IDictionary<string, object> ResultSchema(bool observed)
         {
-            return Schema.Object(new Dictionary<string, object>
+            var properties = new Dictionary<string, object>
             {
                 {
                     "state",
-                    Schema.Choice("Whether the run is still going.", new[] { CompileLog.Compiling, CompileLog.Done }, null)
+                    observed
+                        ? Schema.Choice(
+                            "Where the cycle stands: `compiling` while a run is going, `done` when a finished " +
+                            "result is waiting for a POST to take delivery of it, `idle` when neither — the " +
+                            "next POST would start a run.",
+                            new[] { CompileLog.Idle, CompileLog.Compiling, CompileLog.Done },
+                            null)
+                        : Schema.Choice(
+                            "Whether the run is still going.",
+                            new[] { CompileLog.Compiling, CompileLog.Done },
+                            null)
                 },
                 { "changed", Schema.Property("boolean", "Whether anything actually needed rebuilding.") },
                 { "forced", Schema.Property("boolean", "Whether the run was asked to reload regardless.") },
@@ -117,7 +135,18 @@ namespace Agxmeister.Uplink.Compilation
                     Schema.Property("string", "A warning the numbers would hide, present only when it applies.")
                 },
                 { "console", ReloadConsoleSchema() },
-            });
+            };
+
+            if (observed)
+            {
+                properties["stale"] = Schema.Property(
+                    "boolean",
+                    "Present and true when this result was looked at rather than handed over, which every " +
+                    "GET is. The same result can be read again, and while `state` is `done` a POST can " +
+                    "still take delivery of it.");
+            }
+
+            return Schema.Object(properties);
         }
 
         private static IDictionary<string, object> ReloadConsoleSchema()

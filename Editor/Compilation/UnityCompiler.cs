@@ -105,6 +105,14 @@ namespace Agxmeister.Uplink.Compilation
             return outcome.Result;
         }
 
+        public CompileResult Peek()
+        {
+            // Nothing is persisted: the cycle was not touched, so what is stored still describes it.
+            var result = log.Observe();
+            result.IsPlaying = EditorApplication.isPlaying;
+            return result;
+        }
+
         /// <summary>
         /// Being here at all proves the last domain reload is over, so a run that crossed it — waiting for
         /// its promised reload, or cut off mid-build — is ready to be closed. Not immediately, though: the

@@ -20,6 +20,7 @@ Uplink deliberately ships a compact, feedback-loop-first toolset:
 |---|---|---|
 | `GET /status` | `status` | Report the Editor: Unity version, platform, project, build target, active scene, unsaved changes, play mode |
 | `POST /compile` | `compile` | Build the scripts, follow the reload, and report compiler errors plus what the reload logged; `force: true` reloads even when nothing changed |
+| `GET /compile` | `compile_status` | Report where that run stands — and what the last one found — without starting or collecting anything |
 | `GET /console` | `read_console` | Read console messages, filtered by severity and text, from a cursor so each is seen once |
 | `POST /tests` | `run_tests` | Run the EditMode or PlayMode suite and report which tests failed, and why |
 | `GET /screenshot` | `screenshot` | Capture a camera, the Game view or the Scene view as a PNG — inline, cropped, or written to a file |
@@ -31,6 +32,8 @@ Uplink deliberately ships a compact, feedback-loop-first toolset:
 That's it, by design. The assistant writes code with its own file tools; Uplink tells it whether the code compiles, passes tests, and looks right.
 
 Four of these — `compile`, `run_tests`, `set_play_mode` and `refresh` — do something that outlives the request that asked for it, because compiling, importing and entering play mode reload the Editor's script domain and take the HTTP listener with them. They are therefore **called repeatedly rather than waited on**: the first call starts the work and answers `202`, and a later call returns the result and resets, so the call after that starts the next run. The tool descriptions in `/openapi.json` spell this out, so an assistant reading them gets it right without being told.
+
+Because a call that acts is also the call that polls, one poll too many after a result would start a build nobody asked for. So `compile` has a read-only twin on the same path: `GET /compile` answers the same result — `compiling`, `done`, or `idle` when nothing is running and nothing is waiting — marked `stale: true`, and changes nothing whatever. Poll with it while you wait; use `POST` to start a run and to collect its outcome. See [ADR-0012](Documentation~/adr/0012-a-read-only-verb-for-the-compile-cycle.md).
 
 `compile` in particular reports `done` only once the domain reload a successful build causes has finished, and its result carries what that reload logged — which is how `[InitializeOnLoadMethod]` setup scripts are driven and observed with one tool. Since such scripts silently do nothing in play mode, every `compile` and `refresh` response also says `isPlaying`.
 

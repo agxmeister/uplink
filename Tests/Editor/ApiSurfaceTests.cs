@@ -27,6 +27,11 @@ namespace Agxmeister.Uplink.Tests
             {
                 return new CompileResult { State = CompileLog.Compiling };
             }
+
+            public CompileResult Peek()
+            {
+                return new CompileResult { State = CompileLog.Idle };
+            }
         }
 
         private sealed class NoTests : ITestRunner
@@ -89,6 +94,7 @@ namespace Agxmeister.Uplink.Tests
                 new StatusEndpoint(new StubProbe(new EditorStatus())),
                 new ConsoleEndpoint(new ConsoleBuffer()),
                 new CompileEndpoint(new NoCompiler()),
+                new CompileStatusEndpoint(new NoCompiler()),
                 new PlayModeEndpoint(new PlayModeControl(new StoppedEditor())),
                 new ScreenshotEndpoint(new NoCapture()),
                 new SceneEndpoint(probe),
@@ -136,7 +142,16 @@ namespace Agxmeister.Uplink.Tests
                 }
             }
 
-            Assert.AreEqual(10, names.Count);
+            Assert.AreEqual(11, names.Count);
+        }
+
+        [Test]
+        public void PublishesBothVerbsOfTheCompileCycleOnOnePath()
+        {
+            var compile = (JObject)Document()["paths"]["/compile"];
+
+            Assert.IsNotNull(compile["post"], "POST /compile drives the cycle");
+            Assert.IsNotNull(compile["get"], "GET /compile observes it, and the spec is derived, never edited");
         }
 
         [Test]

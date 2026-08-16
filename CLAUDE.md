@@ -55,7 +55,7 @@ Editor/
   Threading/    IMainThreadDispatcher, MainThreadDispatcher (no Unity dependency — pumpable in tests)
   Status/       StatusEndpoint + IEditorStatusProbe/UnityEditorStatusProbe + EditorStatus
   Console/      ConsoleEndpoint + ConsoleCollector (service) + ConsoleBuffer + UnityConsoleHistory
-  Compilation/  CompileEndpoint + UnityCompiler (service) + CompileLog
+  Compilation/  CompileEndpoint + CompileStatusEndpoint + UnityCompiler (service) + CompileLog
   Testing/      TestsEndpoint + UnityTestRunner (service) + TestLog
   PlayMode/     PlayModeEndpoint + PlayModeControl + UnityPlayMode (service)
   Capture/      ScreenshotEndpoint + IViewCapture/UnityViewCapture
@@ -95,6 +95,13 @@ quiet ticks after the reload, and the `done` result carries a `console` page of 
 see [ADR-0010](Documentation~/adr/0010-compile-reports-the-reload-it-causes.md). `{"force": true}` reloads
 even when nothing changed, which is how such setup code is re-run without touching a file. And because play
 mode makes those reloads silently run nothing, `compile` and `refresh` report `isPlaying` in every response.
+
+Because the acting call is also the polling call, one poll too many after `done` starts a run nobody asked
+for. `compile` therefore has a read-only twin on the same path — `GET /compile`, `CompileStatusEndpoint` over
+`CompileLog.Observe`/`ICompiler.Peek` — which reports the cycle (including the resting `idle` that `Advance`
+never shows), marks what it returns `stale: true`, and changes nothing. See
+[ADR-0012](Documentation~/adr/0012-a-read-only-verb-for-the-compile-cycle.md); the other cycles have no such
+twin yet, and copying it is the way to give them one.
 
 `set_play_mode` is the exception that proves the rule: it needs no stored state, because the Editor itself
 records whether it is playing. It compares what was asked for with what is, and asks again if they differ.

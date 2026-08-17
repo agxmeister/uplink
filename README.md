@@ -33,9 +33,9 @@ Uplink deliberately ships a compact, feedback-loop-first toolset:
 
 That's it, by design. The assistant writes code with its own file tools; Uplink tells it whether the code compiles, passes tests, and looks right.
 
-Four of these — `compile`, `run_tests`, `set_play_mode` and `refresh` — do something that outlives the request that asked for it, because compiling, importing and entering play mode reload the Editor's script domain and take the HTTP listener with them. They are therefore **called repeatedly rather than waited on**: the first call starts the work and answers `202`, and a later call returns the result and resets, so the call after that starts the next run. The tool descriptions in `/openapi.json` spell this out, so an assistant reading them gets it right without being told.
+Five of these — `compile`, `run_tests`, `set_play_mode`, `refresh` and `play_input` — do something that outlives the request that asked for it, because compiling, importing and entering play mode reload the Editor's script domain and take the HTTP listener with them, and an input script measured in seconds spans frames. They are therefore **called repeatedly rather than waited on**: the first call starts the work and answers `202`, and a later call returns the result and resets, so the call after that starts the next run. The tool descriptions in `/openapi.json` spell this out, so an assistant reading them gets it right without being told.
 
-Because a call that acts is also the call that polls, one poll too many after a result would start a build nobody asked for. So `compile` has a read-only twin on the same path: `GET /compile` answers the same result — `compiling`, `done`, or `idle` when nothing is running and nothing is waiting — marked `stale: true`, and changes nothing whatever. Poll with it while you wait; use `POST` to start a run and to collect its outcome. See [ADR-0012](Documentation~/adr/0012-a-read-only-verb-for-the-compile-cycle.md).
+Because a call that acts is also the call that polls, one poll too many after a result would start a build nobody asked for. So `compile` and `play_input` each have a read-only twin on the same path: `GET /compile` and `GET /input` answer the same result — `compiling`/`running`, `done`, or `idle` when nothing is going and nothing is waiting — marked `stale: true`, and change nothing whatever. Poll with them while you wait; use `POST` to start work and to collect its outcome. See [ADR-0012](Documentation~/adr/0012-a-read-only-verb-for-the-compile-cycle.md). `run_tests`, `set_play_mode` and `refresh` have no such twin yet.
 
 `compile` in particular reports `done` only once the domain reload a successful build causes has finished, and its result carries what that reload logged — which is how `[InitializeOnLoadMethod]` setup scripts are driven and observed with one tool. Since such scripts silently do nothing in play mode, every `compile` and `refresh` response also says `isPlaying`.
 
@@ -78,8 +78,11 @@ drop this in its `edges/uplink.json`:
         "read the Editor console",
         "run EditMode and PlayMode tests",
         "capture the game or scene as an image",
+        "photograph an arbitrary viewpoint, or fit an object in frame",
         "inspect the objects in the open scenes",
-        "enter and leave play mode"
+        "enter and leave play mode",
+        "drive the running game with keys, clicks and pointer moves",
+        "make the Editor re-read files changed on disk"
     ],
     "api": {
         "specification": {

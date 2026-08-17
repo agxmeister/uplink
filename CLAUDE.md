@@ -58,6 +58,8 @@ Editor/
   Compilation/  CompileEndpoint + CompileStatusEndpoint + UnityCompiler (service) + CompileLog
   Testing/      TestsEndpoint + UnityTestRunner (service) + TestLog
   PlayMode/     PlayModeEndpoint + PlayModeControl + UnityPlayMode (service)
+  Controls/     InputEndpoint, InputStatusEndpoint + IInputDriver + InputScript (Unity-free)
+    InputSystem/  a second asmdef, not compiled when com.unity.inputsystem is absent
   Capture/      ScreenshotEndpoint + IViewCapture/UnityViewCapture + Viewpoint (Unity-free)
   Hierarchy/    SceneEndpoint, ObjectEndpoint + ISceneProbe/UnitySceneProbe + ObjectPath + SerializedValues
   Configuration/, Diagnostics/
@@ -71,7 +73,8 @@ type of the same name do not coexist.
 
 ## The self-polling cycle
 
-`compile`, `run_tests` and `set_play_mode` all set off work that outlives the request asking for it:
+`compile`, `run_tests`, `set_play_mode` and `play_input` all set off work that outlives the request asking
+for it:
 compiling and entering play mode reload the script domain, which wipes every static and closes the listener.
 The request that starts such work therefore cannot be the request that reports it.
 
@@ -100,8 +103,10 @@ Because the acting call is also the polling call, one poll too many after `done`
 for. `compile` therefore has a read-only twin on the same path — `GET /compile`, `CompileStatusEndpoint` over
 `CompileLog.Observe`/`ICompiler.Peek` — which reports the cycle (including the resting `idle` that `Advance`
 never shows), marks what it returns `stale: true`, and changes nothing. See
-[ADR-0012](Documentation~/adr/0012-a-read-only-verb-for-the-compile-cycle.md); the other cycles have no such
-twin yet, and copying it is the way to give them one.
+[ADR-0012](Documentation~/adr/0012-a-read-only-verb-for-the-compile-cycle.md). `play_input` was born with
+its twin — `GET /input` over `InputScript.Observe`/`IInputDriver.Peek` — which is what that ADR asks of any
+new cycle; `/tests`, `/play` and `/refresh` still have none, and copying `Controls/` is the way to give them
+one.
 
 `set_play_mode` is the exception that proves the rule: it needs no stored state, because the Editor itself
 records whether it is playing. It compares what was asked for with what is, and asks again if they differ.
@@ -126,6 +131,13 @@ the answer and whether the caller should now go and do the thing, and a service 
    and how to use its result, not how it is implemented.
 4. **Register it** in `Uplink`'s static constructor, before `OpenApiEndpoint`. Wrap it in `OnMainThread(...)` if
    it touches `UnityEditor` APIs.
+   *The one exception:* a capability that needs an **optional** package cannot be named there at all, because
+   the composition root would then fail to compile wherever that package is absent. Such a capability lives in
+   its own asmdef, kept out of the build by `versionDefines` + `defineConstraints`, and calls
+   `Uplink.Register(service, endpoints...)` from an `[InitializeOnLoadMethod]` of its own — see `Controls/`
+   and [ADR-0015](Documentation~/adr/0015-optional-capabilities-register-themselves.md). Registration is
+   thread-safe (`EndpointRegistry`) because the listener may already be serving when it happens, and
+   `Register` wraps what it is given in `OnMainThread(...)` for you.
 5. **Test it** without an Editor: feed it a stub probe and assert on the response, and assert that everything it
    returns is also described (see `StatusEndpointTests`).
 6. **Document it** in the README's Features table — and if it settled something a later reader would want to

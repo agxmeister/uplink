@@ -27,6 +27,9 @@ useful part.
 | [0011](0011-screenshots-can-land-on-disk.md) | Screenshots can land on disk, and be cropped where they are rendered | Accepted |
 | [0012](0012-a-read-only-verb-for-the-compile-cycle.md) | A read-only verb for the compile cycle | Accepted |
 | [0013](0013-a-viewpoint-of-our-own.md) | A viewpoint of our own | Accepted |
+| [0014](0014-wrong-editor-state-is-a-400.md) | A right request in the wrong Editor state is a `400` | Accepted |
+| [0015](0015-optional-capabilities-register-themselves.md) | Optional capabilities register themselves | Accepted |
+| [0016](0016-input-runs-the-game-in-the-background.md) | Playing input turns on `runInBackground` | Accepted |
 
 ## Why `Documentation~`
 

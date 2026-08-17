@@ -28,6 +28,8 @@ Uplink deliberately ships a compact, feedback-loop-first toolset:
 | `GET /object` | `read_object` | Read one GameObject's components and their serialized values, narrowed to named fields or components |
 | `POST /play` | `set_play_mode` | Enter, leave, pause or step play mode |
 | `POST /refresh` | `refresh` | Make the Editor re-read files changed on disk, re-opening the open scenes |
+| `POST /input` | `play_input` | Play keys, clicks and pointer moves into the running game — needs the Input System package |
+| `GET /input` | `input_status` | Report where that script has got to, without starting one |
 
 That's it, by design. The assistant writes code with its own file tools; Uplink tells it whether the code compiles, passes tests, and looks right.
 

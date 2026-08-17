@@ -24,12 +24,14 @@ namespace Agxmeister.Uplink
     /// point that brings the API up with the Editor and takes it down before a domain reload.
     ///
     /// To add an endpoint, write a class implementing <see cref="IEndpoint"/> and register it below — nothing
-    /// else in the package changes.
+    /// else in the package changes. The one exception is a capability that may not exist: an assembly that is
+    /// only compiled when an optional package is present cannot be named here, so it calls
+    /// <see cref="Register"/> for itself. See ADR-0015.
     /// </summary>
     [InitializeOnLoad]
     public static class Uplink
     {
-        public const string Version = "0.4.0";
+        public const string Version = "0.5.0";
 
         private const string Title = "Uplink";
         private const string Description = "MCP remote control for the Unity Editor.";
@@ -41,8 +43,11 @@ namespace Agxmeister.Uplink
         private static readonly ISessionStore Store = new SessionStateStore();
         private static readonly MainThreadDispatcher Dispatcher = new MainThreadDispatcher();
         private static readonly List<IUplinkService> Services = new List<IUplinkService>();
-        private static readonly List<IEndpoint> Endpoints = new List<IEndpoint>();
+        private static readonly EndpointRegistry Endpoints = new EndpointRegistry();
         private static readonly HttpListenerServer Server;
+
+        /// <summary>Guards <see cref="Services"/>, which a late registration may also add to.</summary>
+        private static readonly object Gate = new object();
 
         public static int Port
         {
@@ -114,6 +119,50 @@ namespace Agxmeister.Uplink
             Start();
         }
 
+        /// <summary>
+        /// Adds a capability the composition root could not name, because its assembly may not have been
+        /// compiled at all — see ADR-0015. Called from an `[InitializeOnLoadMethod]` in that assembly, which
+        /// Unity runs after this class's static constructor; touching this method would trigger it anyway.
+        ///
+        /// One call registers one service with however many endpoints it serves, because calling it twice
+        /// would attach the service twice. Both endpoints of a cycle — the verb that acts and the verb that
+        /// only looks — therefore arrive together.
+        ///
+        /// The listener may already be serving requests by now, so both collections are added to under a
+        /// lock: <see cref="EndpointRegistry"/> holds its own, and <see cref="Services"/> is held here.
+        ///
+        /// Endpoints registered here are wrapped for the main thread. A capability that exists only when a
+        /// Unity package does is Unity-facing by definition, and the dispatcher it would need to wrap itself
+        /// is not public.
+        /// </summary>
+        public static void Register(IUplinkService service, params IEndpoint[] endpoints)
+        {
+            if (endpoints != null)
+            {
+                foreach (var endpoint in endpoints)
+                {
+                    if (endpoint != null)
+                    {
+                        Endpoints.Add(OnMainThread(endpoint));
+                    }
+                }
+            }
+
+            if (service == null)
+            {
+                return;
+            }
+
+            lock (Gate)
+            {
+                Services.Add(service);
+            }
+
+            // After the endpoints, and outside the lock: attaching touches the Editor, and a service that
+            // cannot start must not take the API down with it.
+            Attach(new[] { service });
+        }
+
         public static void Start()
         {
             Server.Start(Port);
@@ -160,7 +209,13 @@ namespace Agxmeister.Uplink
         {
             Stop();
 
-            foreach (var service in Services)
+            List<IUplinkService> attached;
+            lock (Gate)
+            {
+                attached = new List<IUplinkService>(Services);
+            }
+
+            foreach (var service in attached)
             {
                 try
                 {

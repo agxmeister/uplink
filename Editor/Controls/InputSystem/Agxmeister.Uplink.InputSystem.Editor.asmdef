@@ -1,0 +1,27 @@
+{
+  "name": "Agxmeister.Uplink.InputSystem.Editor",
+  "rootNamespace": "Agxmeister.Uplink.Controls",
+  "references": [
+    "Agxmeister.Uplink.Editor",
+    "Unity.InputSystem"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [
+    "UPLINK_INPUT_SYSTEM"
+  ],
+  "versionDefines": [
+    {
+      "name": "com.unity.inputsystem",
+      "expression": "1.0.0",
+      "define": "UPLINK_INPUT_SYSTEM"
+    }
+  ],
+  "noEngineReferences": false
+}

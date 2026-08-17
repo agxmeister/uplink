@@ -58,8 +58,8 @@ Editor/
   Compilation/  CompileEndpoint + CompileStatusEndpoint + UnityCompiler (service) + CompileLog
   Testing/      TestsEndpoint + UnityTestRunner (service) + TestLog
   PlayMode/     PlayModeEndpoint + PlayModeControl + UnityPlayMode (service)
-  Capture/      ScreenshotEndpoint + IViewCapture/UnityViewCapture
-  Hierarchy/    SceneEndpoint, ObjectEndpoint + ISceneProbe/UnitySceneProbe + SerializedValues
+  Capture/      ScreenshotEndpoint + IViewCapture/UnityViewCapture + Viewpoint (Unity-free)
+  Hierarchy/    SceneEndpoint, ObjectEndpoint + ISceneProbe/UnitySceneProbe + ObjectPath + SerializedValues
   Configuration/, Diagnostics/
 Tests/Editor/             EditMode tests + fakes
 ```
@@ -138,6 +138,10 @@ the answer and whether the caller should now go and do the thing, and a service 
   `OnMainThread(...)`. Code reached that way should be quick — it blocks the Editor while it runs.
 - **Non-JSON responses** are already supported: `Response` carries bytes, so use `Response.Bytes(...)` for a PNG
   screenshot rather than base64 in a JSON field.
+- **A seam an endpoint test drives names no Unity type.** `IViewCapture` carries world-space values as its
+  own `Point`/`Viewpoint` rather than `Vector3`, which is what lets every combination rule of
+  `view=viewpoint` be asserted against a stub with no Editor running. Validate in the endpoint, not in the
+  Unity class behind the seam.
 - **Every failure is `{"error": "..."}`** via `Response.Error(...)`. Let exceptions propagate to `FaultBarrier`
   instead of catching and shaping them per endpoint.
 - **Timeouts are not faults.** A busy Editor (compiling, importing, modal dialog) must read as `504` so the

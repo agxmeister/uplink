@@ -51,6 +51,84 @@ namespace Agxmeister.Uplink.Http
             return value;
         }
 
+        /// <summary>A number within an accepted range, read the same way an integer is.</summary>
+        public float Float(string name, float fallback, float minimum, float maximum)
+        {
+            var raw = String(name, null);
+            if (raw == null)
+            {
+                return fallback;
+            }
+
+            return Number(name, raw, raw, minimum, maximum);
+        }
+
+        /// <summary>
+        /// Three comma-separated numbers — a position or a direction — or null when the parameter is absent.
+        /// Parsed in the invariant culture, so a client never has to know what the Editor's locale calls a
+        /// decimal point.
+        /// </summary>
+        public float[] Triple(string name)
+        {
+            var raw = String(name, null);
+            if (raw == null)
+            {
+                return null;
+            }
+
+            var parts = raw.Split(',');
+            if (parts.Length != 3)
+            {
+                throw new BadRequestException(Malformed(name, "three numbers 'x,y,z'", raw));
+            }
+
+            var values = new float[3];
+            for (var i = 0; i < 3; i++)
+            {
+                values[i] = Number(name, parts[i].Trim(), raw, float.MinValue, float.MaxValue);
+            }
+
+            return values;
+        }
+
+        /// <summary>
+        /// Four comma-separated whole numbers — a rectangle — or null when the parameter is absent.
+        /// <paramref name="shape"/> names the components in order, so the message can say which of them was
+        /// out of range; <paramref name="minimums"/> carries the range rules component by component.
+        /// </summary>
+        public int[] Quad(string name, string shape, int[] minimums)
+        {
+            var raw = String(name, null);
+            if (raw == null)
+            {
+                return null;
+            }
+
+            var components = shape.Split(',');
+            var parts = raw.Split(',');
+            if (parts.Length != 4)
+            {
+                throw new BadRequestException(Malformed(name, WholeNumbers(shape), raw));
+            }
+
+            var values = new int[4];
+            for (var i = 0; i < 4; i++)
+            {
+                if (!int.TryParse(parts[i].Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out values[i]))
+                {
+                    throw new BadRequestException(Malformed(name, WholeNumbers(shape), raw));
+                }
+                if (values[i] < minimums[i])
+                {
+                    throw new BadRequestException(string.Format(
+                        "'{0}' must be {1}, with '{2}' at least {3}, not '{4}'.",
+                        name, WholeNumbers(shape), components[i], minimums[i], raw));
+                }
+            }
+
+            return values;
+        }
+
         public long Long(string name, long fallback, long minimum)
         {
             var raw = String(name, null);
@@ -143,6 +221,40 @@ namespace Agxmeister.Uplink.Http
             }
 
             return value == null ? new T() : value;
+        }
+
+        /// <summary>
+        /// One number out of <paramref name="raw"/>, which is the whole value the client sent — a triple
+        /// reports the triple it could not read, not just the component that failed.
+        /// </summary>
+        private static float Number(string name, string part, string raw, float minimum, float maximum)
+        {
+            float value;
+            if (!float.TryParse(part, NumberStyles.Float, CultureInfo.InvariantCulture, out value)
+                || float.IsNaN(value) || float.IsInfinity(value))
+            {
+                throw new BadRequestException(string.Format(
+                    "'{0}' must be a number, not '{1}'.", name, raw));
+            }
+            if (value < minimum || value > maximum)
+            {
+                throw new BadRequestException(string.Format(
+                    "'{0}' must be between {1} and {2}, not {3}.",
+                    name, minimum.ToString(CultureInfo.InvariantCulture),
+                    maximum.ToString(CultureInfo.InvariantCulture), value.ToString(CultureInfo.InvariantCulture)));
+            }
+
+            return value;
+        }
+
+        private static string Malformed(string name, string shape, string raw)
+        {
+            return string.Format("'{0}' must be {1} separated by commas, not '{2}'.", name, shape, raw);
+        }
+
+        private static string WholeNumbers(string shape)
+        {
+            return string.Format("four whole numbers '{0}'", shape);
         }
     }
 }

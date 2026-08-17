@@ -176,72 +176,14 @@ namespace Agxmeister.Uplink.Hierarchy
             };
         }
 
-        /// <summary>
-        /// The slash-separated path from the scene root, which is what identifies an object to a client —
-        /// instance ids mean nothing across a domain reload.
-        /// </summary>
         private static string PathOf(GameObject subject)
         {
-            var path = "/" + subject.name;
-            var parent = subject.transform.parent;
-            while (parent != null)
-            {
-                path = "/" + parent.name + path;
-                parent = parent.parent;
-            }
-            return path;
+            return ObjectPath.Of(subject);
         }
 
-        /// <summary>
-        /// Walks to an object by path across every loaded scene. Deliberately not GameObject.Find, which
-        /// cannot see inactive objects — and an object being inactive is often the thing being looked into.
-        /// </summary>
         private static GameObject Find(string path)
         {
-            var names = path.Split(new[] { '/' }, System.StringSplitOptions.RemoveEmptyEntries);
-            if (names.Length == 0)
-            {
-                return null;
-            }
-
-            for (var i = 0; i < SceneManager.sceneCount; i++)
-            {
-                var scene = SceneManager.GetSceneAt(i);
-                if (!scene.isLoaded)
-                {
-                    continue;
-                }
-
-                foreach (var root in scene.GetRootGameObjects())
-                {
-                    if (root.name != names[0])
-                    {
-                        continue;
-                    }
-
-                    var found = Descend(root, names);
-                    if (found != null)
-                    {
-                        return found;
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        private static GameObject Descend(GameObject root, string[] names)
-        {
-            var current = root.transform;
-            for (var i = 1; i < names.Length; i++)
-            {
-                current = current.Find(names[i]);
-                if (current == null)
-                {
-                    return null;
-                }
-            }
-            return current.gameObject;
+            return ObjectPath.Find(path);
         }
     }
 }

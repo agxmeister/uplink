@@ -61,6 +61,58 @@ namespace Agxmeister.Uplink.Tests
         }
 
         [Test]
+        public void ReadsAFractionalNumberInTheInvariantCulture()
+        {
+            Assert.AreEqual(1.85f, For("fov", "1.85").Float("fov", 60f, 1f, 179f));
+            Assert.AreEqual(60f, new Arguments(Requests.Of("GET", "/screenshot")).Float("fov", 60f, 1f, 179f));
+            Assert.Throws<BadRequestException>(() => For("fov", "1,85").Float("fov", 60f, 1f, 179f));
+            Assert.Throws<BadRequestException>(() => For("fov", "200").Float("fov", 60f, 1f, 179f));
+        }
+
+        [Test]
+        public void ReadsAPositionAsThreeNumbers()
+        {
+            var triple = For("from", "-20,1.85,-13.5").Triple("from");
+
+            Assert.AreEqual(-20f, triple[0]);
+            Assert.AreEqual(1.85f, triple[1]);
+            Assert.AreEqual(-13.5f, triple[2]);
+            Assert.IsNull(new Arguments(Requests.Of("GET", "/screenshot")).Triple("from"));
+        }
+
+        [Test]
+        public void RejectsATripleOfTheWrongLengthOrShape()
+        {
+            Assert.Throws<BadRequestException>(() => For("from", "1,2").Triple("from"));
+            Assert.Throws<BadRequestException>(() => For("from", "1,2,3,4").Triple("from"));
+            Assert.Throws<BadRequestException>(() => For("from", "1,2,here").Triple("from"));
+        }
+
+        [Test]
+        public void ReadsARectangleAsFourWholeNumbers()
+        {
+            var quad = For("crop", "800,400,320,180").Quad("crop", "x,y,width,height", new[] { 0, 0, 1, 1 });
+
+            CollectionAssert.AreEqual(new[] { 800, 400, 320, 180 }, quad);
+            Assert.IsNull(
+                new Arguments(Requests.Of("GET", "/screenshot")).Quad("crop", "x,y,width,height", new[] { 0, 0, 1, 1 }));
+        }
+
+        [Test]
+        public void RejectsARectangleThatBreaksOneOfItsMinimums()
+        {
+            // The minimums are the range rules, component by component, so they say which one was wrong.
+            var exception = Assert.Throws<BadRequestException>(
+                () => For("crop", "10,10,0,50").Quad("crop", "x,y,width,height", new[] { 0, 0, 1, 1 }));
+
+            StringAssert.Contains("'width'", exception.Message);
+            Assert.Throws<BadRequestException>(
+                () => For("crop", "-1,10,50,50").Quad("crop", "x,y,width,height", new[] { 0, 0, 1, 1 }));
+            Assert.Throws<BadRequestException>(
+                () => For("crop", "10,10").Quad("crop", "x,y,width,height", new[] { 0, 0, 1, 1 }));
+        }
+
+        [Test]
         public void ReadsAnAbsentBodyAsDefaultOptions()
         {
             var options = new Arguments(Requests.Of("POST", "/tests")).Body<Options>();

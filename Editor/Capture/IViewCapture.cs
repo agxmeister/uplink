@@ -31,6 +31,12 @@ namespace Agxmeister.Uplink.Capture
 
         /// <summary>Region of the rendered image to keep, or null for the whole image.</summary>
         public CaptureRect Crop { get; set; }
+
+        /// <summary>
+        /// Where to put a camera of Uplink's own, when <see cref="View"/> is
+        /// <see cref="CaptureView.Viewpoint"/>. Null for every other view.
+        /// </summary>
+        public Viewpoint Viewpoint { get; set; }
     }
 
     /// <summary>
@@ -62,6 +68,19 @@ namespace Agxmeister.Uplink.Capture
         public int Height { get; set; }
 
         public byte[] Png { get; set; }
+
+        /// <summary>
+        /// The pose actually used, for a viewpoint render. Null on every other view — with `frame` the
+        /// caller did not choose these numbers and needs to know what it got, and a non-nullable field would
+        /// otherwise report a pose in answers that never had one.
+        /// </summary>
+        public Point? From { get; set; }
+
+        public Point? At { get; set; }
+
+        public float? Fov { get; set; }
+
+        public float? Ortho { get; set; }
     }
 
     public static class CaptureView
@@ -75,6 +94,12 @@ namespace Agxmeister.Uplink.Capture
         /// <summary>The Scene view, from wherever the editing camera happens to be.</summary>
         public const string Scene = "scene";
 
-        public static readonly string[] All = { Camera, Game, Scene };
+        /// <summary>
+        /// A camera of Uplink's own, put where the caller asked. Reaches what no camera in the scene is
+        /// pointed at, and — unlike every other view — never falls back to one that is.
+        /// </summary>
+        public const string Viewpoint = "viewpoint";
+
+        public static readonly string[] All = { Camera, Game, Scene, Viewpoint };
     }
 }

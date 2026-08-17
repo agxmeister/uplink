@@ -23,7 +23,7 @@ Uplink deliberately ships a compact, feedback-loop-first toolset:
 | `GET /compile` | `compile_status` | Report where that run stands — and what the last one found — without starting or collecting anything |
 | `GET /console` | `read_console` | Read console messages, filtered by severity and text, from a cursor so each is seen once |
 | `POST /tests` | `run_tests` | Run the EditMode or PlayMode suite and report which tests failed, and why |
-| `GET /screenshot` | `screenshot` | Capture a camera, the Game view or the Scene view as a PNG — inline, cropped, or written to a file |
+| `GET /screenshot` | `screenshot` | Capture a camera, the Game view, the Scene view or an arbitrary viewpoint as a PNG — inline, cropped, or written to a file |
 | `GET /scene` | `read_scene` | List the objects in the open scenes, with their paths and components |
 | `GET /object` | `read_object` | Read one GameObject's components and their serialized values, narrowed to named fields or components |
 | `POST /play` | `set_play_mode` | Enter, leave, pause or step play mode |
@@ -147,7 +147,9 @@ If you use Claude Code, add something like this to *your Unity project's* `CLAUD
   run no setup code while the game plays.
 - Then call uplink `run_tests`; failures come back with the assertion message and stack trace.
 - Verify visuals with uplink `screenshot` — pass `path` to write the PNG to a file you can read, and
-  `crop=x,y,w,h` to inspect a detail — and check that a change landed on the object you meant with
+  `crop=x,y,w,h` to inspect a detail. To photograph something no camera is pointed at, use
+  `view=viewpoint` with `frame=/Path/To/Object` (Uplink fits it) or `from=x,y,z` with `at=`/`dir=`.
+  Check that a change landed on the object you meant with
   uplink `read_scene` / `read_object` (narrow with `fields=` / `components=`).
 - Check `sceneDirty` in uplink `status` when work must be saved, not only look right.
 - Never edit .unity, .prefab, or .asset YAML files directly.

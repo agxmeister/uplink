@@ -29,6 +29,9 @@ namespace Agxmeister.Uplink.Tests
 
             public CaptureRequest Asked { get; private set; }
 
+            /// <summary>Set to make the stub answer the way a viewpoint render does — with a pose.</summary>
+            public CaptureResult Pose { get; set; }
+
             public CaptureResult Take(CaptureRequest request)
             {
                 Asked = request;
@@ -38,8 +41,23 @@ namespace Agxmeister.Uplink.Tests
                     Width = request.Width,
                     Height = request.Height,
                     Png = PngBytes,
+                    From = Pose == null ? null : Pose.From,
+                    At = Pose == null ? null : Pose.At,
+                    Fov = Pose == null ? null : Pose.Fov,
+                    Ortho = Pose == null ? null : Pose.Ortho,
                 };
             }
+        }
+
+        /// <summary>A `view=viewpoint` request, with whatever else the case under test needs.</summary>
+        private static Request Viewpoint(params string[] pairs)
+        {
+            var query = new Dictionary<string, string> { { "view", "viewpoint" } };
+            for (var i = 0; i < pairs.Length; i += 2)
+            {
+                query[pairs[i]] = pairs[i + 1];
+            }
+            return Requests.Of("GET", "/screenshot", query);
         }
 
         [Test]
@@ -199,7 +217,192 @@ namespace Agxmeister.Uplink.Tests
             }
 
             CollectionAssert.AreEquivalent(
-                new[] { "view", "camera", "width", "height", "format", "path", "crop" }, names);
+                new[]
+                {
+                    "view", "camera", "width", "height", "format", "path", "crop",
+                    "from", "at", "dir", "frame", "axis", "fov", "ortho", "near", "far",
+                },
+                names);
+        }
+
+        [Test]
+        public void HandsTheWholeViewpointToTheCaptureIntact()
+        {
+            var capture = new StubCapture(CaptureView.Viewpoint);
+
+            new ScreenshotEndpoint(capture).Handle(Viewpoint(
+                "from", "-20,1.85,-13.5", "at", "-20,1.85,0", "fov", "50", "near", "0.5", "far", "400"));
+
+            var viewpoint = capture.Asked.Viewpoint;
+            Assert.AreEqual(CaptureView.Viewpoint, capture.Asked.View);
+            Assert.AreEqual(-20f, viewpoint.From.Value.X);
+            Assert.AreEqual(1.85f, viewpoint.From.Value.Y);
+            Assert.AreEqual(-13.5f, viewpoint.From.Value.Z);
+            Assert.AreEqual(0f, viewpoint.At.Value.Z);
+            Assert.IsFalse(viewpoint.Dir.HasValue);
+            Assert.AreEqual(50f, viewpoint.Fov.Value);
+            Assert.IsFalse(viewpoint.Ortho.HasValue);
+            Assert.AreEqual(0.5f, viewpoint.Near.Value);
+            Assert.AreEqual(400f, viewpoint.Far.Value);
+        }
+
+        [Test]
+        public void HandsAFramedViewpointToTheCaptureIntact()
+        {
+            var capture = new StubCapture(CaptureView.Viewpoint);
+
+            new ScreenshotEndpoint(capture).Handle(Viewpoint(
+                "frame", "/MenuScreen/MenuSlider/MenuHall", "axis", "top", "ortho", "6.5"));
+
+            var viewpoint = capture.Asked.Viewpoint;
+            Assert.AreEqual("/MenuScreen/MenuSlider/MenuHall", viewpoint.Frame);
+            Assert.AreEqual(CaptureAxis.Top, viewpoint.Axis);
+            Assert.AreEqual(6.5f, viewpoint.Ortho.Value);
+            Assert.IsFalse(viewpoint.Fov.HasValue, "'ortho' and 'fov' cannot both be in force");
+            Assert.IsFalse(viewpoint.From.HasValue);
+        }
+
+        [Test]
+        public void LooksStraightAheadFromAPositionGivenOnItsOwn()
+        {
+            var capture = new StubCapture(CaptureView.Viewpoint);
+
+            new ScreenshotEndpoint(capture).Handle(Viewpoint("from", "0,1,0"));
+
+            var viewpoint = capture.Asked.Viewpoint;
+            Assert.AreEqual(0f, viewpoint.Dir.Value.X);
+            Assert.AreEqual(0f, viewpoint.Dir.Value.Y);
+            Assert.AreEqual(1f, viewpoint.Dir.Value.Z);
+            Assert.AreEqual(60f, viewpoint.Fov.Value, "a viewpoint has a field of view even when unasked");
+            Assert.AreEqual(CaptureAxis.Front, viewpoint.Axis);
+        }
+
+        [Test]
+        public void AsksForNoViewpointWhenSomeOtherViewWasWanted()
+        {
+            var capture = new StubCapture();
+
+            new ScreenshotEndpoint(capture).Handle(Requests.Of("GET", "/screenshot"));
+
+            Assert.IsNull(capture.Asked.Viewpoint);
+        }
+
+        [Test]
+        public void RefusesAViewpointItCannotPlace()
+        {
+            var endpoint = new ScreenshotEndpoint(new StubCapture(CaptureView.Viewpoint));
+
+            // Neither 'from' nor 'frame': nothing says where the camera goes.
+            Assert.Throws<BadRequestException>(() => endpoint.Handle(Viewpoint()));
+            Assert.Throws<BadRequestException>(
+                () => endpoint.Handle(Viewpoint("from", "0,0,0", "frame", "/Player")));
+        }
+
+        [Test]
+        public void RefusesTwoWaysOfSayingTheSameThing()
+        {
+            var endpoint = new ScreenshotEndpoint(new StubCapture(CaptureView.Viewpoint));
+
+            Assert.Throws<BadRequestException>(
+                () => endpoint.Handle(Viewpoint("from", "0,0,0", "at", "1,1,1", "dir", "0,0,1")));
+            Assert.Throws<BadRequestException>(
+                () => endpoint.Handle(Viewpoint("from", "0,0,0", "fov", "50", "ortho", "5")));
+        }
+
+        [Test]
+        public void RefusesAnAimItWouldHaveToIgnore()
+        {
+            var endpoint = new ScreenshotEndpoint(new StubCapture(CaptureView.Viewpoint));
+
+            // 'frame' works its own direction out, so an 'at' beside it could only be dropped.
+            Assert.Throws<BadRequestException>(
+                () => endpoint.Handle(Viewpoint("frame", "/Player", "at", "1,1,1")));
+            Assert.Throws<BadRequestException>(
+                () => endpoint.Handle(Viewpoint("frame", "/Player", "dir", "0,0,1")));
+            Assert.Throws<BadRequestException>(
+                () => endpoint.Handle(Viewpoint("from", "0,0,0", "axis", "top")));
+        }
+
+        [Test]
+        public void RefusesATripleItCannotRead()
+        {
+            var endpoint = new ScreenshotEndpoint(new StubCapture(CaptureView.Viewpoint));
+
+            Assert.Throws<BadRequestException>(() => endpoint.Handle(Viewpoint("from", "1,2")));
+            Assert.Throws<BadRequestException>(() => endpoint.Handle(Viewpoint("from", "1,2,over-there")));
+        }
+
+        [Test]
+        public void NamesAViewpointParameterItWouldOtherwiseHaveToDrop()
+        {
+            var endpoint = new ScreenshotEndpoint(new StubCapture());
+
+            // Forgetting 'view=viewpoint' is the likeliest way to get here, and a picture of the main camera
+            // would look like agreement.
+            Assert.Throws<BadRequestException>(
+                () => endpoint.Handle(Requests.With("GET", "/screenshot", "frame", "/Player")));
+            Assert.Throws<BadRequestException>(
+                () => endpoint.Handle(Requests.With("GET", "/screenshot", "axis", "top")));
+            Assert.Throws<BadRequestException>(
+                () => endpoint.Handle(Requests.With("GET", "/screenshot", "from", "0,0,0")));
+        }
+
+        [Test]
+        public void EchoesThePoseItWasActuallyGiven()
+        {
+            var endpoint = new ScreenshotEndpoint(new StubCapture(CaptureView.Viewpoint)
+            {
+                Pose = new CaptureResult
+                {
+                    From = new Point(-20f, 1.85f, -13.5f),
+                    At = new Point(-20f, 1.85f, 0f),
+                    Fov = 50f,
+                },
+            });
+
+            var body = JObject.Parse(Encoding.UTF8.GetString(
+                endpoint.Handle(Viewpoint("frame", "/MenuScreen")).Body));
+
+            CollectionAssert.AreEqual(new[] { -20f, 1.85f, -13.5f }, body["from"].ToObject<float[]>());
+            CollectionAssert.AreEqual(new[] { -20f, 1.85f, 0f }, body["at"].ToObject<float[]>());
+            Assert.AreEqual(50f, body["fov"].Value<float>());
+            Assert.IsNull(body["ortho"], "an orthographic size is not something a perspective shot has");
+        }
+
+        [Test]
+        public void LeavesTheOtherViewsAnswersExactlyAsTheyWere()
+        {
+            var endpoint = new ScreenshotEndpoint(new StubCapture());
+
+            var body = JObject.Parse(Encoding.UTF8.GetString(
+                endpoint.Handle(Requests.Of("GET", "/screenshot")).Body));
+
+            var fields = new List<string>();
+            foreach (var field in body)
+            {
+                fields.Add(field.Key);
+            }
+
+            CollectionAssert.AreEquivalent(new[] { "view", "width", "height", "image" }, fields);
+        }
+
+        [Test]
+        public void DescribesEveryFieldAViewpointAnswerReturns()
+        {
+            var endpoint = new ScreenshotEndpoint(new StubCapture(CaptureView.Viewpoint)
+            {
+                Pose = new CaptureResult { From = new Point(1f, 2f, 3f), At = new Point(0f, 0f, 0f), Ortho = 4f },
+            });
+
+            var body = JObject.Parse(Encoding.UTF8.GetString(
+                endpoint.Handle(Viewpoint("frame", "/MenuScreen")).Body));
+            var described = JObject.FromObject(endpoint.Describe())
+                ["responses"]["200"]["content"]["application/json"]["schema"]["properties"];
+
+            foreach (var field in body)
+            {
+                Assert.IsNotNull(described[field.Key], string.Format("'{0}' is returned but not described.", field.Key));
+            }
         }
 
         [Test]

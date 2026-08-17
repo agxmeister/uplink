@@ -35,3 +35,7 @@ Thumbs.db
 # Do NOT ignore *.meta. Unity stores each asset's GUID there, and every reference in a consuming project
 # resolves through it. A package that ships without them makes every installation invent its own GUIDs.
 # `Documentation~` is exempt only because Unity ignores any folder ending in `~` and generates none for it.
+
+# Working notes that are not part of the package: requirements and the plans that implement them. They live
+# beside the ADRs so they are easy to read together, but only the ADRs are the record this repository keeps.
+Documentation~/requirements/
